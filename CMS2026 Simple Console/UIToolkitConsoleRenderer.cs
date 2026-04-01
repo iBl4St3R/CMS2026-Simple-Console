@@ -35,6 +35,9 @@ namespace CMS2026SimpleConsole
         private Type _displayType;
         private Type _sdType;
 
+        private Type _tfType;
+        private IntPtr _textFieldPtr;
+
         // ── Constructors ────────────────────────────────────────────────────────
         private ConstructorInfo _slCtor;
         private ConstructorInfo _scCtor;
@@ -75,6 +78,8 @@ namespace CMS2026SimpleConsole
         private int _lineCount;
         private bool _dragging;
         private Vector2 _dragOffset;
+
+        private IntPtr _psPtr;
 
         public bool InitFailed => _initFailed;
 
@@ -119,6 +124,7 @@ namespace CMS2026SimpleConsole
             _scType = _ueAsm.GetType("UnityEngine.UIElements.StyleColor");
             _fontDefType = _ueAsm.GetType("UnityEngine.UIElements.FontDefinition");
             _sfdType = _ueAsm.GetType("UnityEngine.UIElements.StyleFontDefinition");
+            _tfType = _ueAsm.GetType("UnityEngine.UIElements.TextField");
 
             _posType = _ueAsm.GetType("UnityEngine.UIElements.Position");
             _spType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1")
@@ -166,6 +172,7 @@ namespace CMS2026SimpleConsole
             var il2cppPsType = Il2CppInterop.Runtime.Il2CppType.From(psType);
             var psRaw = UnityEngine.ScriptableObject.CreateInstance(il2cppPsType);
             var psWrap = Activator.CreateInstance(psType, new object[] { psRaw.Pointer });
+            _psPtr = psRaw.Pointer;
 
             psType.GetProperty("scaleMode").SetValue(psWrap,
                 Enum.Parse(smType, "ConstantPixelSize"));
@@ -207,6 +214,16 @@ namespace CMS2026SimpleConsole
             ApplyDisplay(_panelPtr, _visible);
         }
 
+        public void ReapplyTopmost()
+        {
+            if (!_initialized || _psPtr == IntPtr.Zero) return;
+            var psType = _ueAsm.GetType("UnityEngine.UIElements.PanelSettings");
+            var smType = _ueAsm.GetType("UnityEngine.UIElements.PanelScaleMode");
+            var psWrap = Activator.CreateInstance(psType, new object[] { _psPtr });
+            psType.GetProperty("sortingOrder").SetValue(psWrap, 9999);
+            psType.GetProperty("scaleMode").SetValue(psWrap, Enum.Parse(smType, "ConstantPixelSize"));
+            psType.GetProperty("scale").SetValue(psWrap, 1.0f);
+        }
         private void BuildTitleBar(object panel)
         {
             var lbl = Activator.CreateInstance(_lblType);
@@ -248,8 +265,8 @@ namespace CMS2026SimpleConsole
         {
             float rowTop = TitleH + Pad + LogViewH + Pad;
 
-            var inputLbl = Activator.CreateInstance(_lblType);
-            var s = Style(inputLbl);
+            var tf = Activator.CreateInstance(_tfType);
+            var s = Style(tf);
             SPosition(s, "Absolute");
             SLeft(s, Pad);
             STop(s, rowTop);
@@ -258,14 +275,52 @@ namespace CMS2026SimpleConsole
             SBg(s, new Color(0.04f, 0.04f, 0.07f, 1f));
             SColor(s, new Color(0.85f, 1f, 0.85f, 1f));
             SFont(s);
-            _lblType.GetProperty("text").SetValue(inputLbl, "> _");
-            AddChild(panel, inputLbl);
-            _inputLblPtr = Ptr(inputLbl);
+
+            AddChild(panel, tf);
+            _textFieldPtr = Ptr(tf);
+
+            RegisterSubmitCallback(_textFieldPtr);
 
             MakeButton(panel, "Wyślij",
                 PanelW - 102f, rowTop, 98f, InputH,
                 new Color(0.15f, 0.5f, 0.15f, 1f),
-                () => SubmitInput());
+                () => SubmitTextField());
+        }
+
+        private void RegisterSubmitCallback(IntPtr ptr)
+        {
+            var trickleType = _ueAsm.GetType("UnityEngine.UIElements.TrickleDown");
+            var regMethod = _veType.GetMethods()
+                .First(m => m.Name == "RegisterCallback"
+                         && m.IsGenericMethod
+                         && m.GetParameters().Length == 2)
+                .MakeGenericMethod(typeof(UnityEngine.UIElements.KeyDownEvent));
+
+            var tf = Activator.CreateInstance(_tfType, new object[] { ptr });
+
+            System.Action<UnityEngine.UIElements.KeyDownEvent> handler = (evt) =>
+            {
+                if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
+                    SubmitTextField();
+            };
+
+            var il2cb = Il2CppInterop.Runtime.DelegateSupport
+                .ConvertDelegate<UnityEngine.UIElements.EventCallback<UnityEngine.UIElements.KeyDownEvent>>(handler);
+
+            regMethod.Invoke(tf, new object[] { il2cb, Enum.Parse(trickleType, "TrickleDown") });
+        }
+
+        private void SubmitTextField()
+        {
+            if (_textFieldPtr == IntPtr.Zero) return;
+            var tfFresh = Activator.CreateInstance(_tfType, new object[] { _textFieldPtr });
+            string val = (string)_tfType.GetProperty("value").GetValue(tfFresh);
+            if (!string.IsNullOrEmpty(val))
+            {
+                _tfType.GetProperty("value").SetValue(tfFresh, "");
+                _commandInput = "";
+                OnCommandSubmitted?.Invoke(val);
+            }
         }
 
         private void BuildButtonRow(object panel)
@@ -286,6 +341,11 @@ namespace CMS2026SimpleConsole
                 Pad + 168f, rowTop, 90f, BtnBarH,
                 new Color(0.18f, 0.28f, 0.5f, 1f),
                 () => OnCommandSubmitted?.Invoke("__copylog"));
+
+            MakeButton(panel, "→ IMGUI",
+                Pad + 262f, rowTop, 90f, BtnBarH,
+                new Color(0.3f, 0.2f, 0.45f, 1f),
+                () => OnCommandSubmitted?.Invoke("__switchrenderer"));
         }
 
         private void BuildSignature(object panel)
@@ -402,9 +462,13 @@ namespace CMS2026SimpleConsole
             }
             catch (Exception ex)
             {
+                var inner = ex.InnerException;
+                while (inner?.InnerException != null) inner = inner.InnerException;
                 _log($"[UIToolkit] Init error: {ex.GetType().Name}: {ex.Message}");
-                _log($"[UIToolkit] Stack: {ex.StackTrace?.Split('\n')[0]}");
-                _initFailed = true;  // ← dodaj tę linię
+                if (inner != null && inner != ex)
+                    _log($"[UIToolkit] Inner: {inner.GetType().Name}: {inner.Message}");
+                _log($"[UIToolkit] Stack: {(inner ?? ex).StackTrace?.Split('\n')[0]}");
+                _initFailed = true;
                 return false;
             }
         }
@@ -462,46 +526,14 @@ namespace CMS2026SimpleConsole
 
         private void HandleKeyboard()
         {
-            string typed = Input.inputString;
-            if (string.IsNullOrEmpty(typed)) return;
+           
 
-            bool changed = false;
-            foreach (char c in typed)
-            {
-                if (c == '\b')
-                {
-                    if (_commandInput.Length > 0)
-                    {
-                        _commandInput = _commandInput.Substring(0, _commandInput.Length - 1);
-                        changed = true;
-                    }
-                }
-                else if (c == '\n' || c == '\r')
-                {
-                    if (_commandInput.Length > 0) SubmitInput();
-                }
-                else if (c >= ' ')
-                {
-                    _commandInput += c;
-                    changed = true;
-                }
-            }
-            if (changed) RefreshInputLabel();
         }
-
-        private void SubmitInput()
-        {
-            string cmd = _commandInput;
-            _commandInput = "";
-            RefreshInputLabel();
-            OnCommandSubmitted?.Invoke(cmd);
-        }
+       
 
         private void RefreshInputLabel()
         {
-            if (_inputLblPtr == IntPtr.Zero) return;
-            var lbl = Activator.CreateInstance(_lblType, new object[] { _inputLblPtr });
-            _lblType.GetProperty("text").SetValue(lbl, "> " + _commandInput + "_");
+            
         }
 
         private void HandleDrag()

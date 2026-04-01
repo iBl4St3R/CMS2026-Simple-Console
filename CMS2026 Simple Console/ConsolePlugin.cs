@@ -22,6 +22,8 @@ namespace CMS2026SimpleConsole
         private static string _userLibsDir;
         private static GameObject _consoleHost;
 
+        public static CMS2026SimpleConsoleComponent ConsoleComponent { get; set; }
+
         public override void OnInitializeMelon()
         {
             ModDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
@@ -77,6 +79,9 @@ namespace CMS2026SimpleConsole
             UnityEngine.Object.DontDestroyOnLoad(_consoleHost);
 
             Log.Msg($"CMS2026SimpleConsoleComponent dodany (scena: {sceneName})");
+
+            if (ConsoleComponent != null && ConsoleComponent.Renderer is UIToolkitConsoleRenderer uitR)
+                uitR.ReapplyTopmost();
         }
     }
 }

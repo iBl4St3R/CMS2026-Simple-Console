@@ -32,10 +32,13 @@ namespace CMS2026SimpleConsole
         private string DumpDir =>
             Path.Combine(ConsolePlugin.ModDir, "CMS2026SimpleConsole");
 
+
+        public IConsoleRenderer Renderer => _renderer;
         // ── Lifecycle ────────────────────────────────────────────────────────────
         private void Awake()
         {
             Directory.CreateDirectory(DumpDir);
+            ConsolePlugin.ConsoleComponent = this;  // ← rejestracja
 
             InitRenderer();
 
@@ -57,6 +60,7 @@ namespace CMS2026SimpleConsole
             }
         }
 
+
         private void InitRenderer()
         {
             // Zawsze startuj na IMGUI — działa natychmiast
@@ -69,30 +73,7 @@ namespace CMS2026SimpleConsole
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.F7))
-            {
-                bool currentlyVisible = _renderer.IsVisible;
-
-                // Jeśli UIToolkit jeszcze nie próbowany — spróbuj przy pierwszym F7
-                if (_useUIToolkit && _renderer is IMGUIConsoleRenderer)
-                {
-                    var uitR = new UIToolkitConsoleRenderer(AddLog, _logLines);
-                    uitR.OnCommandSubmitted += HandleCommand;
-
-                    if (uitR.TryInit())
-                    {
-                        _renderer.Destroy();
-                        _renderer = uitR;
-                        AddLog("[Renderer] Przełączono na UIToolkit");
-                    }
-                    else
-                    {
-                        AddLog("[Renderer] UIToolkit niedostępny — zostaje IMGUI");
-                        
-                    }
-                }
-
-                _renderer.SetVisible(!currentlyVisible);
-            }
+                _renderer.SetVisible(!_renderer.IsVisible);
 
             _renderer.OnUpdate();
         }
@@ -104,6 +85,7 @@ namespace CMS2026SimpleConsole
 
         private void OnDestroy()
         {
+            ConsolePlugin.ConsoleComponent = null;
             _renderer?.Destroy();
         }
 
@@ -112,11 +94,40 @@ namespace CMS2026SimpleConsole
         {
             if (string.IsNullOrWhiteSpace(raw)) return;
 
-            // Wewnętrzne komendy rendererów
             if (raw == "__clear") { _logLines.Clear(); _renderer.ClearLines(); return; }
             if (raw == "__copylog") { CopyToClipboard(); return; }
+            if (raw == "__switchrenderer") { SwitchRenderer(); return; }
 
             ExecuteCommand(raw);
+        }
+
+
+        private void SwitchRenderer()
+        {
+            if (_renderer is IMGUIConsoleRenderer)
+            {
+                var uitR = new UIToolkitConsoleRenderer(AddLog, _logLines);
+                uitR.OnCommandSubmitted += HandleCommand;
+                if (uitR.TryInit())
+                {
+                    _renderer.Destroy();
+                    _renderer = uitR;
+                    AddLog("[Renderer] Przełączono na UIToolkit");
+                }
+                else
+                {
+                    AddLog("[Renderer] UIToolkit niedostępny");
+                }
+            }
+            else
+            {
+                _renderer.Destroy();
+                var imgui = new IMGUIConsoleRenderer(_logLines);
+                imgui.OnCommandSubmitted += HandleCommand;
+                imgui.Initialize();
+                _renderer = imgui;
+                AddLog("[Renderer] Przełączono na IMGUI");
+            }
         }
 
         // ── Interpreter komend ───────────────────────────────────────────────────

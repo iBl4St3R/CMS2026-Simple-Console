@@ -85,6 +85,9 @@ namespace CMS2026SimpleConsole
             if (GUI.Button(new Rect(190, btnY, 100, 25), "Copy log"))
                 OnCommandSubmitted?.Invoke("__copylog");
 
+            if (GUI.Button(new Rect(300, btnY, 100, 25), "→ UIToolkit"))
+                OnCommandSubmitted?.Invoke("__switchrenderer");
+
             var sigStyle = new GUIStyle(GUI.skin.label);
             sigStyle.normal.textColor = new Color(0.9f, 0.9f, 0.9f, 1f);
             GUI.Label(new Rect(_windowRect.width - 80, btnY, 110, 25), "by Blaster", sigStyle);
