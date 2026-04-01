@@ -1,0 +1,96 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+  <TargetFramework>net6.0</TargetFramework>
+  <LangVersion>10</LangVersion>
+  <Nullable>disable</Nullable>
+  <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  <PlatformTarget>x64</PlatformTarget>       <!-- FIX MSB3270 -->
+  <RootNamespace>CMS2026SimpleConsole</RootNamespace>
+  <AssemblyName>CMS2026SimpleConsole</AssemblyName>
+  <OutputPath>bin\$(Configuration)\</OutputPath>
+  <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+</PropertyGroup>
+
+  <PropertyGroup>
+    <GameDir>C:\Program Files (x86)\Steam\steamapps\common\Car Mechanic Simulator 2026 Demo</GameDir>
+    <MelonDir>$(GameDir)\MelonLoader</MelonDir>
+    <InteropDir>$(MelonDir)\Il2CppAssemblies</InteropDir>
+    <Net6Dir>$(MelonDir)\net6</Net6Dir>
+  </PropertyGroup>
+
+  <!-- MelonLoader + Il2CppInterop (z net6\) -->
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>$(Net6Dir)\MelonLoader.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(Net6Dir)\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Common">
+      <HintPath>$(Net6Dir)\Il2CppInterop.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MonoMod.Utils">
+      <HintPath>$(Net6Dir)\MonoMod.Utils.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Unity + gra (z Il2CppAssemblies\) -->
+  <ItemGroup>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(InteropDir)\Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(InteropDir)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+	<Reference Include="Assembly-CSharp-firstpass">
+  <HintPath>$(InteropDir)\Assembly-CSharp-firstpass.dll</HintPath>
+  <Private>false</Private>
+</Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(InteropDir)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(InteropDir)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(InteropDir)\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(InteropDir)\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppFusion.Runtime">
+      <HintPath>$(InteropDir)\Il2CppFusion.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppFusion.Addons.SimpleKCC">
+      <HintPath>$(InteropDir)\Il2CppFusion.Addons.SimpleKCC.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppUniTask">
+      <HintPath>$(InteropDir)\Il2CppUniTask.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Roslyn (REPL) -->
+  <ItemGroup>
+  <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.4.0" />
+  <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.4.0" />
+</ItemGroup>
+
+ 
+
+</Project>
