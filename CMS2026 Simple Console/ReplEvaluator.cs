@@ -71,6 +71,8 @@ public static class __Repl
         Path.Combine(interopDir, "Il2CppFusion.Runtime.dll"),
         Path.Combine(interopDir, "Il2CppFusion.Common.dll"),
         Path.Combine(interopDir, "Il2CppFusion.Addons.SimpleKCC.dll"),
+        Path.Combine(interopDir, "UnityEngine.UIElementsModule.dll"),
+        Path.Combine(interopDir, "UnityEngine.TextRenderingModule.dll"),
         Path.Combine(net6Dir, "MelonLoader.dll"),
         Path.Combine(net6Dir, "Il2CppInterop.Runtime.dll"),
         Path.Combine(net6Dir, "Il2CppInterop.Common.dll"),
