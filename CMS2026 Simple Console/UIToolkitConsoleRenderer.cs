@@ -40,6 +40,10 @@ namespace CMS2026SimpleConsole
         private Type _justifyType;
         private Type _sjType;
 
+        private Type _taType;   // UnityEngine.TextAnchor
+        private Type _staType;  // StyleEnum<TextAnchor>
+        private ConstructorInfo _staCtor;
+
         private Type _tfType;
         private IntPtr _textFieldPtr;
 
@@ -153,6 +157,11 @@ namespace CMS2026SimpleConsole
             _saType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_alignType);
             _justifyType = _ueAsm.GetType("UnityEngine.UIElements.Justify");
             _sjType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_justifyType);
+
+            // FIX: TextAnchor dla unityTextAlign
+            _taType = typeof(UnityEngine.TextAnchor);   // z Il2Cpp interop
+            _staType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1")
+                             .MakeGenericType(_taType);
         }
 
         private void ResolveCtors()
@@ -166,6 +175,9 @@ namespace CMS2026SimpleConsole
 
             _saCtor = _saType.GetConstructor(new Type[] { _alignType });
             _sjCtor = _sjType.GetConstructor(new Type[] { _justifyType });
+
+            // FIX
+            _staCtor = _staType.GetConstructor(new Type[] { _taType });
         }
 
         // ── Font ─────────────────────────────────────────────────────────────────
@@ -623,10 +635,9 @@ namespace CMS2026SimpleConsole
             SFont(s);
             // ── centrowanie tekstu ──────────────────────────────────────────────────
 
-            _sType.GetProperty("alignItems").SetValue(s,
-                _saCtor.Invoke(new object[] { Enum.Parse(_alignType, "Center") }));
-            _sType.GetProperty("justifyContent").SetValue(s,
-                _sjCtor.Invoke(new object[] { Enum.Parse(_justifyType, "Center") }));
+            _sType.GetProperty("unityTextAlign").SetValue(s,_staCtor.Invoke(new object[] { UnityEngine.TextAnchor.MiddleCenter }));
+
+            // Padding zero 
             _sType.GetProperty("paddingLeft").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
             _sType.GetProperty("paddingRight").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
             _sType.GetProperty("paddingTop").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
