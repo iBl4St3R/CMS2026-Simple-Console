@@ -1,4 +1,4 @@
-# CMS 2026 Simple Console — v1.0.3
+# CMS 2026 Simple Console
 **Developer console and C# REPL for Car Mechanic Simulator 2026**
 ![version](https://img.shields.io/badge/version-1.0.3-blue)
 ![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.2-green)
