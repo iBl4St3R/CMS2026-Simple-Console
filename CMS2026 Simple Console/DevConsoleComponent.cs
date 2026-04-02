@@ -298,6 +298,14 @@ namespace CMS2026SimpleConsole
                         else AddLog("Usage: find <name>");
                         break;
 
+                    case "inspectobj": 
+                        InspectAtCursor();
+                        break;
+
+                    case "dumpobj":
+                        DumpCarHierarchyToClipboard();
+                        break;
+
                     case "scenes":
                         for (int i = 0; i < SceneManager.sceneCount; i++)
                         {
@@ -319,8 +327,11 @@ namespace CMS2026SimpleConsole
                         AddLog("  setmoney <n>         – set money to exact amount");
                         AddLog("  addexp [n]           – add EXP (default: 1000)");
                         AddLog("  stealcustomercar <idx>      – take ownership of customer car");
+                        AddLog("  fixcar <idx>               – repair all parts of a car to 100%");
                         AddLog("  removedemowalls       – turn off demo walls");
                         AddLog("  find <name>          – search for game objects by name");
+                        AddLog("inspectobj                - Displays detailed information about the object under the crosshair.");
+                        AddLog("dumpobj                    - Copies the structure of the object under the crosshair directly to the clipboard.");
                         AddLog("  scenes               – scene List");
                         AddLog("  showgaragecars              – list cars in garage");
                         AddLog("  showparkingcars             – list cars on parking");
@@ -341,6 +352,15 @@ namespace CMS2026SimpleConsole
                             CmdStoreCarInParking(storeIdx);
                         else
                             AddLog("Usage: storecarinparking <index>  (use showgaragecars to see indices)");
+                        break;
+
+                    case "fixcar":
+                        if (_cmdParts.Length < 2 || !int.TryParse(_cmdParts[1], out int fixIdx))
+                        {
+                            AddLog("Usage: fixcar <index>  (use showgaragecars to see indices)");
+                            break;
+                        }
+                        CmdFixCar(fixIdx);
                         break;
 
                     case "unstorecarfromparking":
@@ -372,6 +392,122 @@ namespace CMS2026SimpleConsole
             AddLog("Log copied to clipboard.");
         }
 
+
+        [HideFromIl2Cpp]
+        private void DumpCarHierarchyToClipboard()
+        {
+            var cam = UnityEngine.Camera.main;
+            if (cam == null) return;
+
+            // Raycast na 15 metrów
+            var ray = cam.ScreenPointToRay(new Vector3(Screen.width / 2f, Screen.height / 2f, 0));
+            if (UnityEngine.Physics.Raycast(ray, out var hit, 15f))
+            {
+                // Próbujemy znaleźć główne drzewo auta
+                Transform root = hit.collider.transform;
+                // Szukamy w górę aż znajdziemy obiekt z CarLoader lub o nazwie car_
+                while (root.parent != null && !root.name.ToLower().StartsWith("car_"))
+                {
+                    root = root.parent;
+                }
+
+                StringBuilder sb = new StringBuilder();
+                sb.AppendLine($"=== HIERARCHY DUMP: {root.name} ===");
+                sb.AppendLine($"Dump Date: {DateTime.Now}");
+                sb.AppendLine("-----------------------------------");
+
+                // Rekurencyjne budowanie drzewa
+                BuildHierarchyString(root, sb, 0);
+
+                // KLUCZ: Kopiowanie do schowka systemowego Windows/Unity
+                GUIUtility.systemCopyBuffer = sb.ToString();
+
+                AddLog($" ");
+                AddLog($">>> SUCCESS: Structure '{root.name}' Copied to clipboard");
+                AddLog($">>> You can now paste it (Ctrl+V) into Notepad.");
+            }
+            else
+            {
+                AddLog("[Dump] No object was hit. Aim for the car.");
+            }
+        }
+
+        [HideFromIl2Cpp]
+        private void BuildHierarchyString(Transform t, StringBuilder sb, int indent)
+        {
+            string space = new string(' ', indent * 2);
+            string activeStatus = t.gameObject.activeSelf ? "" : " [HIDDEN]";
+
+            // Dodajemy nazwę obiektu i jego tag/warstwę dla lepszego info
+            sb.AppendLine($"{space}- {t.name}{activeStatus} (L:{t.gameObject.layer})");
+
+            for (int i = 0; i < t.childCount; i++)
+            {
+                BuildHierarchyString(t.GetChild(i), sb, indent + 1);
+            }
+        }
+
+        [HideFromIl2Cpp]
+        private void InspectAtCursor()
+        {
+            var cam = UnityEngine.Camera.main;
+            if (cam == null)
+            {
+                AddLog("[Inspect] Error: Main camera not found.");
+                return;
+            }
+
+            // Raycast ze środka ekranu (celownika)
+            var ray = cam.ScreenPointToRay(new Vector3(Screen.width / 2f, Screen.height / 2f, 0));
+
+            // Zwiększyłem zasięg do 20m, żeby łapało obiekty w garażu bez podchodzenia pod samą blachę
+            if (UnityEngine.Physics.Raycast(ray, out var hit, 20f))
+            {
+                GameObject go = hit.collider.gameObject;
+                Transform t = go.transform;
+
+                AddLog(" ");
+                AddLog(">>> INSPECTION REPORT <<<");
+                AddLog($"Object Name: {go.name}");
+                AddLog($"Layer: {go.layer}");
+                AddLog($"Distance: {hit.distance:F2}m");
+                AddLog($"World Position: {t.position.x:F2}, {t.position.y:F2}, {t.position.z:F2}");
+
+                // Hierarchia - Rodzic
+                AddLog($"Parent: {(t.parent != null ? t.parent.name : "None (Root)")}");
+
+                // Hierarchia - Dzieci
+                if (t.childCount > 0)
+                {
+                    var childrenNames = new List<string>();
+                    for (int i = 0; i < t.childCount; i++)
+                        childrenNames.Add(t.GetChild(i).name);
+
+                    AddLog($"Children ({t.childCount}): {string.Join(", ", childrenNames)}");
+                }
+                else
+                {
+                    AddLog("Children: None");
+                }
+
+                
+                var components = go.GetComponents<Component>();
+                var compList = new List<string>();
+                foreach (var c in components)
+                {
+                    if (c != null)
+                        compList.Add(c.GetIl2CppType().Name);
+                }
+                AddLog($"Components: {string.Join(", ", compList)}");
+
+                AddLog("-------------------------");
+            }
+            else
+            {
+                AddLog("[Inspect] No object detected within 20m range.");
+            }
+        }
+
         private void RemoveDemoWalls()
         {
             var targets = new[]
@@ -398,6 +534,90 @@ namespace CMS2026SimpleConsole
 
             _renderer?.AddLine(entry);
             ConsolePlugin.Log.Msg(line);
+        }
+
+        private void CmdFixCar(int garageIndex)
+        {
+            try
+            {
+                var asm = GameAsm;
+                var glType = asm.GetType("Il2CppCMS.SceneLoaders.GarageLoader");
+                var gcsType = asm.GetType("Il2CppCMS.SaveSystem.Containers.GarageCarsState");
+                var csdType = asm.GetType("Il2CppCMS.SaveSystem.Containers.Car.CarSaveData");
+
+                // ── Ten sam snapshot co showgaragecars ────────────────────────────────
+                var glWrapped = WrapGarageLoader();
+                if (glWrapped == null) { AddLog("[fixcar] GarageLoader not found"); return; }
+
+                var gcsInst = Activator.CreateInstance(gcsType);
+                var pars = new object[] { gcsInst };
+                glType.GetMethod("SaveCarsState").Invoke(glWrapped, pars);
+
+                var carsRaw = gcsType.GetProperty("Cars").GetValue(pars[0]);
+                int count = (int)carsRaw.GetType().GetProperty("Length").GetValue(carsRaw);
+                var getItem = carsRaw.GetType().GetMethod("get_Item");
+
+                // ── Buduj listę identycznie jak showgaragecars ────────────────────────
+                var filled = new List<(string carId, string uid, bool isCustomer)>();
+                for (int i = 0; i < count; i++)
+                {
+                    var c = getItem.Invoke(carsRaw, new object[] { i });
+                    if (c == null) continue;
+                    var cptr = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                   (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)c);
+                    var csd = Activator.CreateInstance(csdType, new object[] { cptr });
+                    var carId = csdType.GetProperty("CarID").GetValue(csd)?.ToString();
+                    if (string.IsNullOrEmpty(carId)) continue;
+                    var uid = csdType.GetProperty("UID").GetValue(csd)?.ToString();
+                    var isCustomer = (bool)csdType.GetProperty("CustomerCar").GetValue(csd);
+                    filled.Add((carId, uid, isCustomer));
+                }
+
+                if (garageIndex < 0 || garageIndex >= filled.Count)
+                {
+                    AddLog($"[fixcar] Index {garageIndex} out of range (0–{filled.Count - 1})");
+                    AddLog("[fixcar] Use showgaragecars to see indices");
+                    return;
+                }
+
+                var (targetCarId, targetUid, targetIsCustomer) = filled[garageIndex];
+                AddLog($"[fixcar] Repairing [{garageIndex}] {targetCarId} (UID={targetUid})...");
+
+                // ── Znajdź CarLoader w scenie (CarID + CustomerCar = jednoznaczne) ────
+                var loaders = UnityEngine.Object.FindObjectsOfType<Il2CppCMS.Core.Car.CarLoader>(true);
+                Il2CppCMS.Core.Car.CarLoader target = null;
+                foreach (var l in loaders)
+                {
+                    if (string.IsNullOrEmpty(l.CarID)) continue;
+                    if (l.CarID == targetCarId && l.CustomerCar == targetIsCustomer)
+                    { target = l; break; }
+                }
+
+                if (target == null)
+                {
+                    AddLog($"[fixcar] CarLoader for {targetCarId} (Customer={targetIsCustomer}) not found in scene");
+                    return;
+                }
+
+                // ── Naprawa ───────────────────────────────────────────────────────────
+                target.Dev_RepairAllBody();
+                AddLog("[fixcar] Dev_RepairAllBody() OK");
+
+                typeof(Il2CppCMS.Core.Car.CarLoader)
+                    .GetMethod("SetConditionAll")
+                    .Invoke(target, new object[] { 1f });
+                AddLog("[fixcar] SetConditionAll(1.0) OK");
+
+                target.ClearEnginePartsConditionCache();
+                AddLog("[fixcar] Engine cache cleared");
+
+                // ── Zapisz ───────────────────────────────────────────────────────────
+                var gl = UnityEngine.Object.FindObjectOfType<Il2CppCMS.SceneLoaders.GarageLoader>();
+                if (gl != null) { gl.SaveState(); AddLog("[fixcar] SaveState OK"); }
+
+                AddLog($"[fixcar] Done! {targetCarId} repaired to 100%.");
+            }
+            catch (Exception ex) { AddLog("[fixcar] ERR: " + ex.Message); }
         }
 
         private void ApplyConfig()
