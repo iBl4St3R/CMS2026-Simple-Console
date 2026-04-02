@@ -35,6 +35,11 @@ namespace CMS2026SimpleConsole
         private Type _displayType;
         private Type _sdType;
 
+        private Type _alignType;
+        private Type _saType;
+        private Type _justifyType;
+        private Type _sjType;
+
         private Type _tfType;
         private IntPtr _textFieldPtr;
 
@@ -45,6 +50,9 @@ namespace CMS2026SimpleConsole
         private ConstructorInfo _soCtor;
         private ConstructorInfo _sfdCtor;
         private ConstructorInfo _sdCtor;
+
+        private ConstructorInfo _saCtor;
+        private ConstructorInfo _sjCtor;
 
         // ── Font ────────────────────────────────────────────────────────────────
         private object _fontDef;
@@ -87,6 +95,9 @@ namespace CMS2026SimpleConsole
         public bool IsVisible => _visible;
         public string CommandInput { get => _commandInput; set => _commandInput = value; }
         public event Action<string> OnCommandSubmitted;
+
+        private bool _inputLocked = false;
+        private IntPtr _lockBtnPtr;
 
         // ────────────────────────────────────────────────────────────────────────
         public UIToolkitConsoleRenderer(Action<string> log, List<string> logLines)
@@ -137,6 +148,11 @@ namespace CMS2026SimpleConsole
             _displayType = _ueAsm.GetType("UnityEngine.UIElements.DisplayStyle");
             _sdType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1")
                                  .MakeGenericType(_displayType);
+
+            _alignType = _ueAsm.GetType("UnityEngine.UIElements.Align");
+            _saType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_alignType);
+            _justifyType = _ueAsm.GetType("UnityEngine.UIElements.Justify");
+            _sjType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_justifyType);
         }
 
         private void ResolveCtors()
@@ -147,6 +163,9 @@ namespace CMS2026SimpleConsole
             _soCtor = _soType.GetConstructor(new Type[] { _ofType });
             _sfdCtor = _sfdType.GetConstructor(new Type[] { _fontDefType });
             _sdCtor = _sdType.GetConstructor(new Type[] { _displayType });
+
+            _saCtor = _saType.GetConstructor(new Type[] { _alignType });
+            _sjCtor = _sjType.GetConstructor(new Type[] { _justifyType });
         }
 
         // ── Font ─────────────────────────────────────────────────────────────────
@@ -346,6 +365,17 @@ namespace CMS2026SimpleConsole
                 Pad + 262f, rowTop, 90f, BtnBarH,
                 new Color(0.3f, 0.2f, 0.45f, 1f),
                 () => OnCommandSubmitted?.Invoke("__switchrenderer"));
+
+            var lockBtn = MakeButtonWithPtr(panel, "Lock Input",
+    Pad + 356f, rowTop, 100f, BtnBarH,
+    new Color(0.15f, 0.45f, 0.15f, 1f),
+    () =>
+    {
+        _inputLocked = !_inputLocked;
+        UpdateLockButtonLabel();
+        OnCommandSubmitted?.Invoke("__lockinput");
+    });
+            _lockBtnPtr = Ptr(lockBtn);
         }
 
         private void BuildSignature(object panel)
@@ -363,6 +393,14 @@ namespace CMS2026SimpleConsole
             SFont(s);
             _lblType.GetProperty("text").SetValue(sig, "by Blaster");
             AddChild(Wrap(_panelPtr), sig);
+        }
+
+
+        private void MakeButton(object parent,
+    string label, float x, float y, float w, float h,
+    Color bg, Action onClick)
+        {
+            MakeButtonWithPtr(parent, label, x, y, w, h, bg, onClick);
         }
 
         // ── Public API ───────────────────────────────────────────────────────────
@@ -526,14 +564,14 @@ namespace CMS2026SimpleConsole
 
         private void HandleKeyboard()
         {
-           
+
 
         }
-       
+
 
         private void RefreshInputLabel()
         {
-            
+
         }
 
         private void HandleDrag()
@@ -573,9 +611,7 @@ namespace CMS2026SimpleConsole
             _sType.GetProperty("display").SetValue(s, _sdCtor.Invoke(new object[] { val }));
         }
 
-        private void MakeButton(object parent,
-            string label, float x, float y, float w, float h,
-            Color bg, Action onClick)
+        private object MakeButtonWithPtr(object parent,string label, float x, float y, float w, float h,Color bg, Action onClick)
         {
             var btn = Activator.CreateInstance(_btnType);
             var s = Style(btn);
@@ -585,15 +621,38 @@ namespace CMS2026SimpleConsole
             SBg(s, bg);
             SColor(s, Color.white);
             SFont(s);
+            // ── centrowanie tekstu ──────────────────────────────────────────────────
+
+            _sType.GetProperty("alignItems").SetValue(s,
+                _saCtor.Invoke(new object[] { Enum.Parse(_alignType, "Center") }));
+            _sType.GetProperty("justifyContent").SetValue(s,
+                _sjCtor.Invoke(new object[] { Enum.Parse(_justifyType, "Center") }));
+            _sType.GetProperty("paddingLeft").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
+            _sType.GetProperty("paddingRight").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
+            _sType.GetProperty("paddingTop").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
+            _sType.GetProperty("paddingBottom").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
+
             _btnType.GetProperty("text").SetValue(btn, label);
 
             var clickable = _btnType.GetProperty("clickable").GetValue(btn);
             var il2cppAction = Il2CppInterop.Runtime.DelegateSupport
                 .ConvertDelegate<Il2CppSystem.Action>(onClick);
-            _clickableType.GetMethod("add_clicked")
-                .Invoke(clickable, new object[] { il2cppAction });
+            _clickableType.GetMethod("add_clicked").Invoke(clickable, new object[] { il2cppAction });
 
             AddChild(parent, btn);
+            return btn;
+        }
+
+        private void UpdateLockButtonLabel()
+        {
+            if (_lockBtnPtr == IntPtr.Zero) return;
+            var btn = Activator.CreateInstance(_btnType, new object[] { _lockBtnPtr });
+            _btnType.GetProperty("text").SetValue(btn,
+                _inputLocked ? "Unlock Input" : "Lock Input");
+            var s = Style(btn);
+            SBg(s, _inputLocked
+                ? new Color(0.7f, 0.15f, 0.15f, 1f)
+                : new Color(0.15f, 0.45f, 0.15f, 1f));
         }
 
         // ── Reflection micro-helpers ─────────────────────────────────────────────

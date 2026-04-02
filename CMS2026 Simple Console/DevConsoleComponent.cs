@@ -17,6 +17,12 @@ namespace CMS2026SimpleConsole
     {
         public CMS2026SimpleConsoleComponent(IntPtr ptr) : base(ptr) { }
 
+        // ── Input blocking ───────────────────────────────────────────────────────
+        private object _uiCommonMap;
+        private Il2CppCMS.Player.Controller.PlayerInput _playerInput;
+        private bool _inputLocked = false;
+
+
         // ── Renderer ─────────────────────────────────────────────────────────────
         // false = IMGUI fallback (zmień ręcznie gdy UIToolkit nie działa)
         private bool _useUIToolkit = true;
@@ -58,6 +64,8 @@ namespace CMS2026SimpleConsole
                 AddLog("[REPL] INIT ERROR: " + ex.GetType().Name);
                 AddLog("[REPL] " + ex.Message);
             }
+
+            InitInputBlocking();
         }
 
 
@@ -86,6 +94,7 @@ namespace CMS2026SimpleConsole
         private void OnDestroy()
         {
             ConsolePlugin.ConsoleComponent = null;
+            if (_inputLocked) SetGameInputEnabled(true);
             _renderer?.Destroy();
         }
 
@@ -93,6 +102,7 @@ namespace CMS2026SimpleConsole
         private void HandleCommand(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return;
+            if (raw == "__lockinput") { ToggleInputLock(); return; }
 
             if (raw == "__clear") { _logLines.Clear(); _renderer.ClearLines(); return; }
             if (raw == "__copylog") { CopyToClipboard(); return; }
@@ -280,6 +290,74 @@ namespace CMS2026SimpleConsole
             _renderer?.AddLine(entry);
             ConsolePlugin.Log.Msg(line);
         }
+
+
+        private void InitInputBlocking()
+        {
+            // Tylko logujemy że system jest gotowy — właściwe szukanie obiektów
+            // odbywa się lazy w SetGameInputEnabled przy pierwszym wywołaniu
+            var assetType = System.Type.GetType("UnityEngine.InputSystem.InputActionAsset, Unity.InputSystem");
+            if (assetType == null)
+                AddLog("[InputBlock] BRAK: Unity.InputSystem");
+            else
+                AddLog("[InputBlock] OK — przycisk 'Lock Input' gotowy");
+        }
+
+
+        public void ToggleInputLock()
+        {
+            _inputLocked = !_inputLocked;
+            SetGameInputEnabled(!_inputLocked);
+            AddLog(_inputLocked ? "[InputBlock] Input ZABLOKOWANY" : "[InputBlock] Input ODBLOKOWANY");
+        }
+
+        private void SetGameInputEnabled(bool enabled)
+        {
+            // ── Lazy find: PlayerInput ───────────────────────────────────────────
+            if (_playerInput == null)
+                _playerInput = UnityEngine.Object.FindObjectOfType<Il2CppCMS.Player.Controller.PlayerInput>();
+
+            if (_playerInput != null)
+                _playerInput.enabled = enabled;
+            else
+                AddLog("[InputBlock] PlayerInput nie znaleziony (gracz nie zaladowany?)");
+
+            // ── Lazy find: UI Common action map ─────────────────────────────────
+            // Szukamy za każdym razem — referencja może być przestarzała po reload sceny
+            _uiCommonMap = null;
+            try
+            {
+                var assetType = System.Type.GetType("UnityEngine.InputSystem.InputActionAsset, Unity.InputSystem");
+                if (assetType == null) return;
+
+                var all = Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.From(assetType));
+                foreach (var raw in all)
+                {
+                    var asset = Activator.CreateInstance(assetType, new object[] { raw.Pointer });
+                    var maps = assetType.GetProperty("actionMaps").GetValue(asset);
+                    var indexer = maps.GetType().GetProperty("Item");
+                    int count = (int)maps.GetType().GetProperty("Count").GetValue(maps);
+                    for (int i = 0; i < count; i++)
+                    {
+                        var m = indexer.GetValue(maps, new object[] { i });
+                        var name = (string)m.GetType().GetProperty("name").GetValue(m);
+                        if (name == "UI Common") { _uiCommonMap = m; break; }
+                    }
+                    if (_uiCommonMap != null) break;
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("[InputBlock] Blad szukania mapy: " + ex.Message);
+                return;
+            }
+
+            if (_uiCommonMap != null)
+                _uiCommonMap.GetType().GetMethod(enabled ? "Enable" : "Disable").Invoke(_uiCommonMap, null);
+            else
+                AddLog("[InputBlock] UI Common map nie znaleziona");
+        }
+
     }
 }
 //```

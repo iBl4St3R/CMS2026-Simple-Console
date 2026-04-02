@@ -13,6 +13,8 @@ namespace CMS2026SimpleConsole
         private Rect _windowRect = new Rect(20f, 20f, 640f, 500f);
         private string _commandInput = "";
         private const int WindowId = 9871;
+        
+
 
         public bool IsVisible => _visible;
         public string CommandInput { get => _commandInput; set => _commandInput = value; }
@@ -87,6 +89,7 @@ namespace CMS2026SimpleConsole
 
             if (GUI.Button(new Rect(300, btnY, 100, 25), "→ UIToolkit"))
                 OnCommandSubmitted?.Invoke("__switchrenderer");
+
 
             var sigStyle = new GUIStyle(GUI.skin.label);
             sigStyle.normal.textColor = new Color(0.9f, 0.9f, 0.9f, 1f);
