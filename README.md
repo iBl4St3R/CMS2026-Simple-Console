@@ -54,7 +54,10 @@ Press **F7** to toggle the console and enter commands:
 2. Download the latest release
 3. Extract `CMS2026SimpleConsole.dll` into your game's **Mods** folder
 
-Default path: **SteamLibrary\steamapps\common\Car Mechanic Simulator 2026 Demo\Mods\**
+**Default path:**
+```text
+SteamLibrary\steamapps\common\Car Mechanic Simulator 2026 Demo\Mods\
+```
 ---
 
 ## ⚠️ Known Issues
