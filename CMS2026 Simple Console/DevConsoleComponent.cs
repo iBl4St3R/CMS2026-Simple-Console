@@ -1,15 +1,17 @@
-﻿using Il2CppCMS.Player.Controller;
+﻿using CMS2026SimpleConsole;
+using Il2Cpp;
+using Il2CppCMS.Player.Controller;
 using Il2CppCMS.Scenes.Loader;
-using CMS2026SimpleConsole;
+using Il2CppInterop.Runtime.Attributes;
 using MelonLoader;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using Il2Cpp;
 
 namespace CMS2026SimpleConsole
 {
@@ -32,7 +34,7 @@ namespace CMS2026SimpleConsole
 
         private readonly List<string> _logLines = new List<string>();
         private const int MaxLogLines = 2000;
-       
+
         private string[] _cmdParts;
 
         private string DumpDir => Path.Combine(ConsolePlugin.ModDir, "CMS2026SimpleConsole");
@@ -42,9 +44,9 @@ namespace CMS2026SimpleConsole
         private CursorLockMode _savedLockState;
         private bool _savedCursorVisible;
         private bool _cursorOverrideActive = false;
-        
 
 
+        [HideFromIl2Cpp]
         public IConsoleRenderer Renderer => _renderer;
         // ── Lifecycle ────────────────────────────────────────────────────────────
         private void Awake()
@@ -72,7 +74,7 @@ namespace CMS2026SimpleConsole
                 AddLog("[REPL] INIT ERROR: " + ex.GetType().Name);
                 AddLog("[REPL] " + ex.Message);
             }
-            
+
         }
 
 
@@ -186,7 +188,7 @@ namespace CMS2026SimpleConsole
             {
                 switch (cmd)
                 {
-                    
+
                     case "run":
                     case "eval":
                         string code = raw.Substring(cmd.Length).Trim();
@@ -237,6 +239,27 @@ namespace CMS2026SimpleConsole
                         else AddLog("Usage: charspeed <value>");
                         break;
 
+
+                    case "addmoney":
+                        int moneyAdd = 10000;
+                        if (_cmdParts.Length > 1) int.TryParse(_cmdParts[1], out moneyAdd);
+                        Il2CppCMS.Shared.SharedGameDataManager.Instance.AddMoneyRpc(moneyAdd);
+                        AddLog($"Added ${moneyAdd}. Balance: ${Il2CppCMS.Shared.SharedGameDataManager.Instance.money}");
+                        break;
+
+                    case "setmoney":
+                        if (_cmdParts.Length > 1 && int.TryParse(_cmdParts[1], out int moneySet))
+                        {
+                            var sgdm = Il2CppCMS.Shared.SharedGameDataManager.Instance;
+                            int diff = moneySet - (int)sgdm.money;
+                            sgdm.AddMoneyRpc(diff);
+                            AddLog($"Money set to ${moneySet}. Balance: ${sgdm.money}");
+                        }
+                        else AddLog("Usage: setmoney <amount>");
+                        break;
+
+
+
                     case "addexp":
                         int exp = 1000;
                         if (_cmdParts.Length > 1) int.TryParse(_cmdParts[1], out exp);
@@ -246,6 +269,15 @@ namespace CMS2026SimpleConsole
 
                     case "removedemowalls":
                         RemoveDemoWalls();
+                        break;
+
+                    case "stealcustomercar":
+                        if (_cmdParts.Length < 2 || !int.TryParse(_cmdParts[1], out int stealIdx))
+                        {
+                            AddLog("Usage: stealcustomercar <index>  (use showgaragecars to see indices)");
+                            break;
+                        }
+                        CmdStealCustomerCar(stealIdx);
                         break;
 
                     case "find":
@@ -283,10 +315,39 @@ namespace CMS2026SimpleConsole
                         //AddLog("  Opcje: autolock=true/false");
                         AddLog("  resetscene           – reload garage scene");
                         AddLog("  charspeed <n>        – player walk speed");
+                        AddLog("  addmoney [n]         – add money (default: 10000)");
+                        AddLog("  setmoney <n>         – set money to exact amount");
                         AddLog("  addexp [n]           – add EXP (default: 1000)");
+                        AddLog("  stealcustomercar <idx>      – take ownership of customer car");
                         AddLog("  removedemowalls       – turn off demo walls");
                         AddLog("  find <name>          – search for game objects by name");
                         AddLog("  scenes               – scene List");
+                        AddLog("  showgaragecars              – list cars in garage");
+                        AddLog("  showparkingcars             – list cars on parking");
+                        //AddLog("  storecarinparking <idx>     – move garage car[idx] to parking"); //narazie chowamy komende przed publicznym uzyciem bo nie dziala  unstorecarfromparking
+                        //AddLog("  unstorecarfromparking <idx> – remove parking car[idx] from parking");
+                        break;
+
+                    case "showgaragecars":
+                        CmdShowGarageCars();
+                        break;
+
+                    case "showparkingcars":
+                        CmdShowParkingCars();
+                        break;
+
+                    case "storecarinparking":
+                        if (_cmdParts.Length > 1 && int.TryParse(_cmdParts[1], out int storeIdx))
+                            CmdStoreCarInParking(storeIdx);
+                        else
+                            AddLog("Usage: storecarinparking <index>  (use showgaragecars to see indices)");
+                        break;
+
+                    case "unstorecarfromparking":
+                        if (_cmdParts.Length > 1 && int.TryParse(_cmdParts[1], out int unstoreIdx))
+                            CmdUnstoreCarFromParking(unstoreIdx);
+                        else
+                            AddLog("Usage: unstorecarfromparking <index>  (use showparkingcars to see indices)");
                         break;
 
                     default:
@@ -362,7 +423,354 @@ namespace CMS2026SimpleConsole
         {
             _inputLocked = !_inputLocked;
             SetGameInputEnabled(!_inputLocked);
-            
+
+        }
+
+        // ── Save system helpers ──────────────────────────────────────────────────
+
+
+        [HideFromIl2Cpp]
+        private Assembly GameAsm =>AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "Assembly-CSharp");
+
+        [HideFromIl2Cpp]
+        private object GetSaveManagerInstance()
+        {
+            var smType = GameAsm?.GetType("Il2CppCMS.SaveSystem.SaveManager");
+            return smType?.GetProperty("Instance",
+                BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+        }
+
+        [HideFromIl2Cpp]
+        private object GetStateFromDict(string key)
+        {
+            var smInst = GetSaveManagerInstance();
+            if (smInst == null) return null;
+            var psRaw = smInst.GetType().GetProperty("profileStates").GetValue(smInst);
+            var p0 = psRaw.GetType().GetProperty("Item").GetValue(psRaw, new object[] { 0 });
+            var dict = p0.GetType().GetProperty("States").GetValue(p0);
+            var args = new object[] { key, null };
+            dict.GetType().GetMethod("TryGetValue").Invoke(dict, args);
+            return args[1];
+        }
+
+        [HideFromIl2Cpp]
+        private object WrapGarageLoader()
+        {
+            var asm = GameAsm;
+            var glType = asm.GetType("Il2CppCMS.SceneLoaders.GarageLoader");
+            var il2gl = Il2CppInterop.Runtime.Il2CppType.From(glType);
+            var gls = UnityEngine.Object.FindObjectsOfType(il2gl, true);
+            if (gls.Length == 0) return null;
+            return Activator.CreateInstance(glType, new object[] { gls[0].Pointer });
+        }
+
+        // ── Garage / Parking commands ────────────────────────────────────────────
+
+        private void CmdShowGarageCars()
+        {
+            try
+            {
+                var asm = GameAsm;
+                var glType = asm.GetType("Il2CppCMS.SceneLoaders.GarageLoader");
+                var gcsType = asm.GetType("Il2CppCMS.SaveSystem.Containers.GarageCarsState");
+                var csdType = asm.GetType("Il2CppCMS.SaveSystem.Containers.Car.CarSaveData");
+
+                var glWrapped = WrapGarageLoader();
+                if (glWrapped == null) { AddLog("[GarageCars] GarageLoader not found"); return; }
+
+                var gcsInst = Activator.CreateInstance(gcsType);
+                var pars = new object[] { gcsInst };
+                glType.GetMethod("SaveCarsState").Invoke(glWrapped, pars);
+
+                var carsRaw = gcsType.GetProperty("Cars").GetValue(pars[0]);
+                int count = (int)carsRaw.GetType().GetProperty("Length").GetValue(carsRaw);
+                var getItem = carsRaw.GetType().GetMethod("get_Item");
+
+                AddLog($"[GarageCars] Slots: {count}");
+                int found = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    var c = getItem.Invoke(carsRaw, new object[] { i });
+                    if (c == null) continue;
+                    var cptr = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                   (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)c);
+                    var csd = Activator.CreateInstance(csdType, new object[] { cptr });
+                    var carId = csdType.GetProperty("CarID").GetValue(csd)?.ToString();
+                    if (string.IsNullOrEmpty(carId)) continue;
+                    var uid = csdType.GetProperty("UID").GetValue(csd)?.ToString();
+                    var isCustomer = (bool)csdType.GetProperty("CustomerCar").GetValue(csd);
+                    AddLog($"  [{i}] {carId}  UID={uid}  Customer={isCustomer}");
+                    found++;
+                }
+                AddLog($"[GarageCars] Total: {found}");
+            }
+            catch (Exception ex) { AddLog("[GarageCars] ERR: " + ex.Message); }
+        }
+
+        private void CmdStealCustomerCar(int garageIndex)
+        {
+            try
+            {
+                var asm = GameAsm;
+                var glType = asm.GetType("Il2CppCMS.SceneLoaders.GarageLoader");
+                var gcsType = asm.GetType("Il2CppCMS.SaveSystem.Containers.GarageCarsState");
+                var csdType = asm.GetType("Il2CppCMS.SaveSystem.Containers.Car.CarSaveData");
+
+                // Ten sam snapshot co showgaragecars
+                var glWrapped = WrapGarageLoader();
+                if (glWrapped == null) { AddLog("[stealcustomercar] GarageLoader not found"); return; }
+
+                var gcsInst = Activator.CreateInstance(gcsType);
+                var pars = new object[] { gcsInst };
+                glType.GetMethod("SaveCarsState").Invoke(glWrapped, pars);
+
+                var carsRaw = gcsType.GetProperty("Cars").GetValue(pars[0]);
+                int count = (int)carsRaw.GetType().GetProperty("Length").GetValue(carsRaw);
+                var getItem = carsRaw.GetType().GetMethod("get_Item");
+
+                // Zbuduj listę filled tak samo jak showgaragecars
+                var filled = new System.Collections.Generic.List<(int slot, string carId, string uid, bool isCustomer)>();
+                for (int i = 0; i < count; i++)
+                {
+                    var c = getItem.Invoke(carsRaw, new object[] { i });
+                    if (c == null) continue;
+                    var cptr = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                   (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)c);
+                    var csd = Activator.CreateInstance(csdType, new object[] { cptr });
+                    var carId = csdType.GetProperty("CarID").GetValue(csd)?.ToString();
+                    if (string.IsNullOrEmpty(carId)) continue;
+                    var uid = csdType.GetProperty("UID").GetValue(csd)?.ToString();
+                    var isCustomer = (bool)csdType.GetProperty("CustomerCar").GetValue(csd);
+                    filled.Add((i, carId, uid, isCustomer));
+                }
+
+                if (garageIndex < 0 || garageIndex >= filled.Count)
+                {
+                    AddLog($"[stealcustomercar] Index {garageIndex} out of range (0-{filled.Count - 1})");
+                    AddLog("[stealcustomercar] Use showgaragecars to see indices");
+                    return;
+                }
+
+                var (slot, targetCarId, targetUid, targetIsCustomer) = filled[garageIndex];
+
+                if (!targetIsCustomer)
+                {
+                    AddLog($"[stealcustomercar] [{garageIndex}] {targetCarId} is already yours (Customer=False)");
+                    return;
+                }
+
+                // Znajdź CarLoader w scenie po UID
+                var loaders = UnityEngine.Object.FindObjectsOfType<Il2CppCMS.Core.Car.CarLoader>(true);
+                Il2CppCMS.Core.Car.CarLoader target = null;
+                foreach (var l in loaders)
+                    if (!string.IsNullOrEmpty(l.CarID) && l.CarID == targetCarId && l.CustomerCar)
+                    { target = l; break; }
+
+                if (target == null)
+                {
+                    AddLog($"[stealcustomercar] CarLoader for {targetCarId} (UID={targetUid}) not found in scene");
+                    return;
+                }
+
+                int jobId = target.orderConnection;
+                AddLog($"[stealcustomercar] [{garageIndex}] {targetCarId} Customer=True orderConn={jobId} → stealing...");
+
+                target.SetCustomerCar(false, 0);
+                AddLog($"[stealcustomercar] SetCustomerCar OK → Customer={target.CustomerCar}");
+
+                var og = UnityEngine.Object.FindObjectOfType<Il2CppCMS.Core.OrderGenerator>();
+                if (og != null && jobId > 0)
+                {
+                    og.CancelJob(jobId, false);
+                    AddLog($"[stealcustomercar] CancelJob({jobId}) OK — AvailableJobs={og.AvailableJobsAmount}");
+                }
+
+                var gl = UnityEngine.Object.FindObjectOfType<Il2CppCMS.SceneLoaders.GarageLoader>();
+                if (gl != null) { gl.SaveState(); AddLog("[stealcustomercar] SaveState OK"); }
+
+                AddLog($"[stealcustomercar] Done! {targetCarId} is now yours. Use resetscene to reload.");
+            }
+            catch (Exception ex) { AddLog("[stealcustomercar] ERR: " + ex.Message); }
+        }
+
+        private void CmdShowParkingCars()
+        {
+            try
+            {
+                var asm = GameAsm;
+                var psType = asm.GetType("Il2CppCMS.SaveSystem.Containers.ParkingState");
+                var csdType = asm.GetType("Il2CppCMS.SaveSystem.Containers.Car.CarSaveData");
+
+                var raw = GetStateFromDict("ParkingState.dat");
+                if (raw == null) { AddLog("[Parking] ParkingState not found"); return; }
+
+                var psPtr = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                  (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)raw);
+                var ps = Activator.CreateInstance(psType, new object[] { psPtr });
+                var carsRaw = psType.GetProperty("Cars").GetValue(ps);
+                int count = (int)carsRaw.GetType().GetProperty("Length").GetValue(carsRaw);
+                var getItem = carsRaw.GetType().GetMethod("get_Item");
+
+                int filled = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    var c = getItem.Invoke(carsRaw, new object[] { i });
+                    if (c == null) continue;
+                    var cptr = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                   (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)c);
+                    var csd = Activator.CreateInstance(csdType, new object[] { cptr });
+                    var carId = csdType.GetProperty("CarID").GetValue(csd)?.ToString();
+                    if (string.IsNullOrEmpty(carId)) continue;
+                    var uid = csdType.GetProperty("UID").GetValue(csd)?.ToString();
+                    AddLog($"  [slot {i}] {carId}  UID={uid}");
+                    filled++;
+                }
+                AddLog($"[Parking] Cars on parking: {filled}");
+            }
+            catch (Exception ex) { AddLog("[Parking] ERR: " + ex.Message); }
+        }
+
+        private void CmdStoreCarInParking(int garageIndex)
+        {
+            try
+            {
+                var asm = GameAsm;
+                var glType = asm.GetType("Il2CppCMS.SceneLoaders.GarageLoader");
+                var gcsType = asm.GetType("Il2CppCMS.SaveSystem.Containers.GarageCarsState");
+                var csdType = asm.GetType("Il2CppCMS.SaveSystem.Containers.Car.CarSaveData");
+                var psType = asm.GetType("Il2CppCMS.SaveSystem.Containers.ParkingState");
+                var clType = asm.GetType("Il2CppCMS.Core.Car.CarLoader");
+
+                // 1. Snapshot GarageCarsState przez GarageLoader (live scene)
+                var glWrapped = WrapGarageLoader();
+                if (glWrapped == null) { AddLog("[Store] GarageLoader not found"); return; }
+
+                var gcsInst = Activator.CreateInstance(gcsType);
+                var pars = new object[] { gcsInst };
+                glType.GetMethod("SaveCarsState").Invoke(glWrapped, pars);
+
+                var gcsCarsRaw = gcsType.GetProperty("Cars").GetValue(pars[0]);
+                int gcsCount = (int)gcsCarsRaw.GetType().GetProperty("Length").GetValue(gcsCarsRaw);
+
+                if (garageIndex < 0 || garageIndex >= gcsCount)
+                {
+                    AddLog($"[Store] Index {garageIndex} out of range (0-{gcsCount - 1})");
+                    return;
+                }
+
+                var targetRaw = gcsCarsRaw.GetType().GetMethod("get_Item")
+                                    .Invoke(gcsCarsRaw, new object[] { garageIndex });
+                if (targetRaw == null) { AddLog($"[Store] Slot {garageIndex} is empty"); return; }
+
+                var cptr = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)targetRaw);
+                var csd = Activator.CreateInstance(csdType, new object[] { cptr });
+                var carId = csdType.GetProperty("CarID").GetValue(csd)?.ToString();
+                var uid = csdType.GetProperty("UID").GetValue(csd)?.ToString();
+                if (string.IsNullOrEmpty(carId)) { AddLog($"[Store] Slot {garageIndex} has no CarID"); return; }
+
+                // 2. Znajdź wolny slot w ParkingState i wstaw CarSaveData
+                var raw = GetStateFromDict("ParkingState.dat");
+                if (raw == null) { AddLog("[Store] ParkingState not found"); return; }
+                var psPtr = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                   (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)raw);
+                var ps = Activator.CreateInstance(psType, new object[] { psPtr });
+                var pCarsRaw = psType.GetProperty("Cars").GetValue(ps);
+                int pCount = (int)pCarsRaw.GetType().GetProperty("Length").GetValue(pCarsRaw);
+                var pGetItem = pCarsRaw.GetType().GetMethod("get_Item");
+                var pSetItem = pCarsRaw.GetType().GetMethod("set_Item");
+
+                int freeSlot = -1;
+                for (int i = 0; i < pCount; i++)
+                {
+                    var c = pGetItem.Invoke(pCarsRaw, new object[] { i });
+                    if (c == null) { freeSlot = i; break; }
+                    var cp = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                  (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)c);
+                    var cs = Activator.CreateInstance(csdType, new object[] { cp });
+                    if (string.IsNullOrEmpty(csdType.GetProperty("CarID").GetValue(cs)?.ToString()))
+                    {
+                        freeSlot = i; break;
+                    }
+                }
+                if (freeSlot == -1) { AddLog("[Store] Parking is full!"); return; }
+
+                pSetItem.Invoke(pCarsRaw, new object[] { freeSlot, targetRaw });
+
+                // IsDirty = true — bez tego serializer pomija zapis
+                psType.GetProperty("IsDirty")?.SetValue(ps, true);
+
+                AddLog($"[Store] {carId} (UID={uid}) → parking slot {freeSlot}");
+
+                // 3. ResetCarID na CarLoaderze w scenie
+                var il2cl = Il2CppInterop.Runtime.Il2CppType.From(clType);
+                var cls = UnityEngine.Object.FindObjectsOfType(il2cl, true);
+                bool loaderReset = false;
+                foreach (var rawLoader in cls)
+                {
+                    var cl = Activator.CreateInstance(clType, new object[] { rawLoader.Pointer });
+                    var lCarId = clType.GetProperty("CarID").GetValue(cl)?.ToString();
+                    var lUid = clType.GetProperty("UID")?.GetValue(cl)?.ToString();
+                    // dopasuj po UID jeśli dostępne, fallback po CarID
+                    bool match = (!string.IsNullOrEmpty(lUid) && lUid == uid)
+                              || (string.IsNullOrEmpty(lUid) && lCarId == carId);
+                    if (!match) continue;
+
+                    clType.GetMethod("ResetCarID").Invoke(cl, null);
+                    AddLog($"[Store] ResetCarID on {rawLoader.name}");
+                    loaderReset = true;
+                    break;
+                }
+                if (!loaderReset) AddLog("[Store] WARNING: CarLoader not found in scene");
+
+                // 4. GarageLoader.SaveState() — czyta ze sceny (teraz pusty loader)
+                glType.GetMethod("SaveState").Invoke(glWrapped, null);
+                AddLog("[Store] GarageLoader.SaveState() called");
+
+                AddLog("[Store] Done. Use 'resetscene' to reload.");
+            }
+            catch (Exception ex) { AddLog("[Store] ERR: " + ex.Message); }
+        }
+
+        private void CmdUnstoreCarFromParking(int parkingIndex)
+        {
+            try
+            {
+                var asm = GameAsm;
+                var csdType = asm.GetType("Il2CppCMS.SaveSystem.Containers.Car.CarSaveData");
+                var psType = asm.GetType("Il2CppCMS.SaveSystem.Containers.ParkingState");
+
+                var raw = GetStateFromDict("ParkingState.dat");
+                if (raw == null) { AddLog("[Unstore] ParkingState not found"); return; }
+                var psPtr = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                  (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)raw);
+                var ps = Activator.CreateInstance(psType, new object[] { psPtr });
+                var carsRaw = psType.GetProperty("Cars").GetValue(ps);
+                int count = (int)carsRaw.GetType().GetProperty("Length").GetValue(carsRaw);
+
+                if (parkingIndex < 0 || parkingIndex >= count)
+                {
+                    AddLog($"[Unstore] Index {parkingIndex} out of range (use showparkingcars)");
+                    return;
+                }
+
+                var c = carsRaw.GetType().GetMethod("get_Item").Invoke(carsRaw, new object[] { parkingIndex });
+                if (c == null) { AddLog($"[Unstore] Parking slot {parkingIndex} is already empty"); return; }
+
+                var cptr = Il2CppInterop.Runtime.IL2CPP.Il2CppObjectBaseToPtrNotNull(
+                                (Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase)c);
+                var csd = Activator.CreateInstance(csdType, new object[] { cptr });
+                var carId = csdType.GetProperty("CarID").GetValue(csd)?.ToString();
+                var uid = csdType.GetProperty("UID").GetValue(csd)?.ToString();
+
+                carsRaw.GetType().GetMethod("set_Item").Invoke(carsRaw, new object[] { parkingIndex, null });
+                AddLog($"[Unstore] {carId} (UID={uid}) removed from parking slot {parkingIndex}");
+
+                var smInst = GetSaveManagerInstance();
+                smInst?.GetType().GetMethod("SaveCurrentProfile")?.Invoke(smInst, null);
+                AddLog("[Unstore] Save written.");
+            }
+            catch (Exception ex) { AddLog("[Unstore] ERR: " + ex.Message); }
         }
 
         private void SetGameInputEnabled(bool enabled)
