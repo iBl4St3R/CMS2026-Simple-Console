@@ -266,7 +266,7 @@ namespace CMS2026SimpleConsole
             SColor(s, Color.white);
             SFont(s);
             _lblType.GetProperty("text").SetValue(lbl,
-                "  CMS2026 Simple Console  [F7=hide]  |  drag: tytul");
+                "  CMS2026 Simple Console  [F7=hide]");
             AddChild(panel, lbl);
         }
 
@@ -377,34 +377,20 @@ namespace CMS2026SimpleConsole
                 Pad + 262f, rowTop, 90f, BtnBarH,
                 new Color(0.3f, 0.2f, 0.45f, 1f),
                 () => OnCommandSubmitted?.Invoke("__switchrenderer"));
-
-            var lockBtn = MakeButtonWithPtr(panel, "Lock Input",
-    Pad + 356f, rowTop, 100f, BtnBarH,
-    new Color(0.15f, 0.45f, 0.15f, 1f),
-    () =>
-    {
-        _inputLocked = !_inputLocked;
-        UpdateLockButtonLabel();
-        OnCommandSubmitted?.Invoke("__lockinput");
-    });
-            _lockBtnPtr = Ptr(lockBtn);
         }
 
         private void BuildSignature(object panel)
         {
             float rowTop = TitleH + Pad + LogViewH + Pad + InputH + Pad;
 
-            var sig = Activator.CreateInstance(_lblType);
-            var s = Style(sig);
-            SPosition(s, "Absolute");
-            SLeft(s, PanelW - 82f);
-            STop(s, rowTop);
-            SWidth(s, 78f);
-            SHeight(s, BtnBarH);
-            SColor(s, new Color(0.6f, 0.6f, 0.6f, 1f));
-            SFont(s);
-            _lblType.GetProperty("text").SetValue(sig, "by Blaster");
-            AddChild(Wrap(_panelPtr), sig);
+            MakeButtonLink(Wrap(_panelPtr), "by Blaster",PanelW - 82f, rowTop, 78f, BtnBarH,() => Application.OpenURL("https://github.com/iBl4St3R/CMS2026-Simple-Console"));
+        }
+
+        private void MakeButtonLink(object parent, string label, float x, float y, float w, float h, Action onClick)
+        {
+            var btn = MakeButtonWithPtr(parent, label, x, y, w, h, new Color(0f, 0f, 0f, 0f), onClick);
+            var s = Style(btn);
+            SColor(s, new Color(0.4f, 0.7f, 1f, 1f)); // niebieski
         }
 
 

@@ -72,8 +72,7 @@ namespace CMS2026SimpleConsole
                 AddLog("[REPL] INIT ERROR: " + ex.GetType().Name);
                 AddLog("[REPL] " + ex.Message);
             }
-
-            InitInputBlocking();
+            
         }
 
 
@@ -90,39 +89,34 @@ namespace CMS2026SimpleConsole
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F8))
-            {
-                // Fokus na pole input
-                _renderer.FocusInput();
-            }
-
-            if (Input.GetKeyDown(KeyCode.F9))
-            {
-                ToggleInputLock();
-            }
-
-
             if (Input.GetKeyDown(KeyCode.F7))
-            {
-                bool nowVisible = !_renderer.IsVisible;
-
-                _renderer.SetVisible(nowVisible);
-
-                if (_config != null && _config.GetBool("autolock"))
-                    ToggleInputLock();
-            }
+                _renderer.SetVisible(!_renderer.IsVisible);
 
             _renderer.OnUpdate();
         }
 
         private void LateUpdate()
         {
-            if (!_renderer.IsVisible) return;
-
-            if (Cursor.lockState != CursorLockMode.None)
-                Cursor.lockState = CursorLockMode.None;
-            if (!Cursor.visible)
-                Cursor.visible = true;
+            if (_renderer.IsVisible)
+            {
+                // Konsola widoczna — blokuj grę, pokaż kursor
+                if (!_inputLocked)
+                {
+                    _inputLocked = true;
+                    SetGameInputEnabled(false);
+                }
+                if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
+                if (!Cursor.visible) Cursor.visible = true;
+            }
+            else
+            {
+                // Konsola schowana — odblokuj grę, ukryj kursor
+                if (_inputLocked)
+                {
+                    _inputLocked = false;
+                    SetGameInputEnabled(true);
+                }
+            }
         }
 
         private void OnGUI()
@@ -141,7 +135,6 @@ namespace CMS2026SimpleConsole
         private void HandleCommand(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return;
-            if (raw == "__lockinput") { ToggleInputLock(); return; }
 
             if (raw == "__clear") { _logLines.Clear(); _renderer.ClearLines(); return; }
             if (raw == "__copylog") { CopyToClipboard(); return; }
