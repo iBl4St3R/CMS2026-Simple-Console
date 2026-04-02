@@ -87,7 +87,7 @@ namespace CMS2026SimpleConsole
         private bool _visible = true;
         private string _commandInput = "";
         private float _scrollY;
-        private int _lineCount;
+        private float _currentY;
         private bool _dragging;
         private Vector2 _dragOffset;
 
@@ -426,13 +426,17 @@ namespace CMS2026SimpleConsole
         {
             if (!_initialized) return;
 
-            if (_lineCount >= MaxLabels)
+            // Zamiast _lineCount używamy liczby dzieci w content
+            var content = Wrap(_contentPtr);
+            int childCount = (int)_veType.GetProperty("childCount").GetValue(content);
+
+            if (childCount >= MaxLabels)
             {
                 RebuildAllLines();
                 return;
             }
-            AppendLabel(line, _lineCount);
-            _lineCount++;
+
+            AppendLabel(line);
             ScrollToBottom();
         }
 
@@ -441,7 +445,7 @@ namespace CMS2026SimpleConsole
             if (!_initialized) return;
             var content = Wrap(_contentPtr);
             _veType.GetMethod("Clear").Invoke(content, null);
-            _lineCount = 0;
+            _currentY = 0f;   // BYŁO: _lineCount = 0
             _scrollY = 0f;
         }
 
@@ -524,20 +528,34 @@ namespace CMS2026SimpleConsole
         }
 
         // ── Internals ────────────────────────────────────────────────────────────
-        private void AppendLabel(string text, int index)
+        private void AppendLabel(string text)
         {
+            // Ile pikseli szerokości mamy na tekst
+            float usableW = PanelW - Pad * 4;
+
+            // Przybliżona szerokość znaku dla LegacyRuntime.ttf przy domyślnym rozmiarze
+            // ~7.5px — możesz to skalibrować eval-em jeśli trzeba
+            const float CharW = 7.5f;
+            int charsPerLine = Mathf.Max(1, Mathf.FloorToInt(usableW / CharW));
+
+            int linesNeeded = Mathf.Max(1, Mathf.CeilToInt((float)text.Length / charsPerLine));
+            float labelH = linesNeeded * LineH;
+
             var lbl = Activator.CreateInstance(_lblType);
             var s = Style(lbl);
             SPosition(s, "Absolute");
             SLeft(s, Pad);
-            STop(s, index * LineH);
-            SWidth(s, PanelW - Pad * 4);
-            SHeight(s, LineH);
+            STop(s, _currentY);
+            SWidth(s, usableW);
+            SHeight(s, labelH);
             SFont(s);
             SColor(s, Color.white);
             _lblType.GetProperty("text").SetValue(lbl, text);
+
             var content = Wrap(_contentPtr);
             AddChild(content, lbl);
+
+            _currentY += labelH;
         }
 
         private void RebuildAllLines()
@@ -545,16 +563,13 @@ namespace CMS2026SimpleConsole
             ClearLines();
             int start = Mathf.Max(0, _logLines.Count - MaxLabels);
             for (int i = start; i < _logLines.Count; i++)
-            {
-                AppendLabel(_logLines[i], _lineCount);
-                _lineCount++;
-            }
+                AppendLabel(_logLines[i]);   // bez indeksu
             ScrollToBottom();
         }
 
         private void ScrollToBottom()
         {
-            _scrollY = Mathf.Max(0f, _lineCount * LineH - LogViewH);
+            _scrollY = Mathf.Max(0f, _currentY - LogViewH);
             ApplyScroll();
         }
 
@@ -569,7 +584,7 @@ namespace CMS2026SimpleConsole
         {
             float delta = Input.mouseScrollDelta.y;
             if (Mathf.Abs(delta) < 0.01f) return;
-            float maxScroll = Mathf.Max(0f, _lineCount * LineH - LogViewH);
+            float maxScroll = Mathf.Max(0f, _currentY - LogViewH);
             _scrollY = Mathf.Clamp(_scrollY - delta * 40f, 0f, maxScroll);
             ApplyScroll();
         }
