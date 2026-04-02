@@ -1,5 +1,5 @@
 # CMS 2026 Simple Console — 1.0.0
-**A powerful developer tool and C# REPL for Car Mechanic Simulator 2026.**
+**Developer tool and C# REPL for Car Mechanic Simulator 2026.**
 
 ---
 
@@ -17,11 +17,12 @@ The heart of this mod is the `run` command. It allows you to execute C# code dir
 ---
 
 ## Console Commands
-Type these commands directly into the console (press **~** or **F7** to toggle):
+Type these commands directly into the console (press **F7** to toggle):
 
 
-* **`help`** – Compile and run the C# code.
+
 * **`run <C# code>`** – Compile and run the C# code.
+* **`help`** – List of all available commands.
 * **`find <name>`** – Search for game objects by name.
 * **`inspectobj`** – Displays detailed information about the object under the crosshair.
 * **`dumpobj`** – Copies the structure of the object under the crosshair directly to the clipboard.
@@ -40,7 +41,7 @@ Type these commands directly into the console (press **~** or **F7** to toggle):
 ---
 
 ## Installation
-1.  Install **MelonLoader 0.6.1+**.
+1.  Install **MelonLoader 0.7.2**.
 2.  Download the latest release.
 3.  Unzip `CMS2026SimpleConsole.dll` into your game's **`Mods`** folder.
     * `Default: \SteamLibrary\steamapps\common\Car Mechanic Simulator 2026 Demo\Mods\`
@@ -48,5 +49,5 @@ Type these commands directly into the console (press **~** or **F7** to toggle):
 ---
 
 ## Known Issues
-* Use `inspectobj` only when looking at physical objects; otherwise, it might return "No object detected".
-* REPL requires basic knowledge of C# and game's internal namespaces.
+* 
+* 
