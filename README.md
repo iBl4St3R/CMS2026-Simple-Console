@@ -1,6 +1,7 @@
 # CMS 2026 Simple Console — v1.0.3
 **Developer console and C# REPL for Car Mechanic Simulator 2026**
-
+![version](https://img.shields.io/badge/version-1.0.3-blue)
+![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.2-green)
 ---
 
 ## 📖 Overview
@@ -8,7 +9,7 @@
 **CMS 2026 Simple Console** is a developer-oriented tool created for modders and advanced users.  
 It provides a powerful and transparent way to inspect, debug, and interact with the game built on the Unity 6 engine.
 
-This tool allows you to explore internal systems, experiment with gameplay mechanics, and accelerate development workflows — all without modifying the base game files.
+This tool allows you to explore internal systems, experiment with gameplay mechanics, and accelerate development workflows — without patching game files directly.
 
 ---
 
@@ -28,6 +29,8 @@ if (car != null)
 else
     Print("No car found nearby.");
 ```
+
+---
 ## 🖥️ Console Commands
 Press **F7** to toggle the console and enter commands:
 
@@ -69,7 +72,6 @@ Press **F7** to toggle the console and enter commands:
 SteamLibrary\steamapps\common\Car Mechanic Simulator 2026 Demo\
 ```
 ---
-
 ## ⚠️ Known Issues
 
 ### UI Toolkit not loading (Error 0x800711C7)
@@ -82,7 +84,11 @@ This is **not a bug in the mod**. It is caused by a Windows 11 security feature 
 1. Open the **Start Menu** and search for **Smart App Control**.
 2. Set it to **Off** (Note: Windows may require a certain state to change this, or it might be in 'Evaluation' mode).
 
-
+---
 ## 📌 Notes
 * This tool is intended for development and debugging purposes
 * Use responsibly when modifying gameplay
+
+---
+## 📄 License
+   For modding and educational use only. Not affiliated with Red Dot Games.
