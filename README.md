@@ -53,10 +53,10 @@ Press **F7** to toggle the console and enter commands:
 ## 📦 Installation
 
 ### 1. Pre-requisites
-* Ensure you have **MelonLoader v0.7.2 (Open-Beta)** installed for *Car Mechanic Simulator 2026 Demo*.
+* Ensure you have **MelonLoader v0.7.2** installed for *Car Mechanic Simulator 2026 Demo*.
 
 ### 2. Download & Extract
-* Download the latest **CMS 2026 Simple Console** version from the **Releases** section.
+* Download the **[latest CMS 2026 Simple Console version](https://github.com/iBl4St3R/CMS2026-Simple-Console/releases)** from the Releases section.
 * Extract the contents of the downloaded ZIP archive.
 
 ### 3. Copy Files
