@@ -13,7 +13,7 @@ namespace CMS2026SimpleConsole
         private Rect _windowRect = new Rect(20f, 20f, 640f, 500f);
         private string _commandInput = "";
         private const int WindowId = 9871;
-        
+
 
 
         public bool IsVisible => _visible;
@@ -44,6 +44,11 @@ namespace CMS2026SimpleConsole
                 "CMS2026 Simple Console  [F7=hide]  [IMGUI fallback]");
 
             GUI.backgroundColor = orig;
+        }
+
+        public void FocusInput()
+        {
+
         }
 
         private void DrawWindow(int id)

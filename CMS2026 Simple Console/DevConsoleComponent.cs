@@ -41,6 +41,9 @@ namespace CMS2026SimpleConsole
         private ConfigManager _config;
         private CursorLockMode _savedLockState;
         private bool _savedCursorVisible;
+        private bool _cursorOverrideActive = false;
+        
+
 
         public IConsoleRenderer Renderer => _renderer;
         // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -87,32 +90,39 @@ namespace CMS2026SimpleConsole
 
         private void Update()
         {
+            if (Input.GetKeyDown(KeyCode.F8))
+            {
+                // Fokus na pole input
+                _renderer.FocusInput();
+            }
+
+            if (Input.GetKeyDown(KeyCode.F9))
+            {
+                ToggleInputLock();
+            }
+
+
             if (Input.GetKeyDown(KeyCode.F7))
             {
                 bool nowVisible = !_renderer.IsVisible;
+
                 _renderer.SetVisible(nowVisible);
 
-                if (nowVisible)
-                {
-                    // Konsola otwiera się — zapamiętaj stan kursora i pokaż go
-                    _savedLockState = Cursor.lockState;
-                    _savedCursorVisible = Cursor.visible;
-                    Cursor.lockState = CursorLockMode.None;
-                    Cursor.visible = true;
-                }
-                else
-                {
-                    // Konsola zamyka się — przywróć stan kursora sprzed otwarcia
-                    Cursor.lockState = _savedLockState;
-                    Cursor.visible = _savedCursorVisible;
-                }
-
-                // AutoLock
                 if (_config != null && _config.GetBool("autolock"))
                     ToggleInputLock();
             }
 
             _renderer.OnUpdate();
+        }
+
+        private void LateUpdate()
+        {
+            if (!_renderer.IsVisible) return;
+
+            if (Cursor.lockState != CursorLockMode.None)
+                Cursor.lockState = CursorLockMode.None;
+            if (!Cursor.visible)
+                Cursor.visible = true;
         }
 
         private void OnGUI()
@@ -370,49 +380,59 @@ namespace CMS2026SimpleConsole
 
         private void SetGameInputEnabled(bool enabled)
         {
-            // ── Lazy find: PlayerInput ───────────────────────────────────────────
-            if (_playerInput == null)
-                _playerInput = UnityEngine.Object.FindObjectOfType<Il2CppCMS.Player.Controller.PlayerInput>();
-
-            if (_playerInput != null)
-                _playerInput.enabled = enabled;
-            else
-                AddLog("[InputBlock] PlayerInput nie znaleziony (gracz nie zaladowany?)");
-
-            // ── Lazy find: UI Common action map ─────────────────────────────────
-            // Szukamy za każdym razem — referencja może być przestarzała po reload sceny
-            _uiCommonMap = null;
+            // ── Metoda 1: InputManager.EnableGameplay (blokuje input bez UI) ─────────
             try
             {
-                var assetType = System.Type.GetType("UnityEngine.InputSystem.InputActionAsset, Unity.InputSystem");
-                if (assetType == null) return;
-
-                var all = Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.From(assetType));
-                foreach (var raw in all)
+                var pi = UnityEngine.Object.FindObjectOfType<Il2CppCMS.Player.Controller.PlayerInput>();
+                if (pi != null)
                 {
-                    var asset = Activator.CreateInstance(assetType, new object[] { raw.Pointer });
-                    var maps = assetType.GetProperty("actionMaps").GetValue(asset);
-                    var indexer = maps.GetType().GetProperty("Item");
-                    int count = (int)maps.GetType().GetProperty("Count").GetValue(maps);
-                    for (int i = 0; i < count; i++)
-                    {
-                        var m = indexer.GetValue(maps, new object[] { i });
-                        var name = (string)m.GetType().GetProperty("name").GetValue(m);
-                        if (name == "UI Common") { _uiCommonMap = m; break; }
-                    }
-                    if (_uiCommonMap != null) break;
+                    var im = pi.GetType().GetProperty("inputManager").GetValue(pi);
+                    if (im != null)
+                        im.GetType().GetMethod("EnableGameplay").Invoke(im, new object[] { enabled });
                 }
             }
             catch (Exception ex)
             {
-                AddLog("[InputBlock] Blad szukania mapy: " + ex.Message);
-                return;
+                AddLog("[InputBlock] InputManager error: " + ex.Message);
             }
 
-            if (_uiCommonMap != null)
-                _uiCommonMap.GetType().GetMethod(enabled ? "Enable" : "Disable").Invoke(_uiCommonMap, null);
-            else
-                AddLog("[InputBlock] UI Common map nie znaleziona");
+            // ── Metoda 2: stara — PlayerInput.enabled + UI Common map (blokuje UI) ───
+            if (_playerInput == null)
+                _playerInput = UnityEngine.Object.FindObjectOfType<Il2CppCMS.Player.Controller.PlayerInput>();
+            if (_playerInput != null)
+                _playerInput.enabled = enabled;
+
+            try
+            {
+                var assetType = System.Type.GetType("UnityEngine.InputSystem.InputActionAsset, Unity.InputSystem");
+                if (assetType != null)
+                {
+                    var all = Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.From(assetType));
+                    foreach (var raw in all)
+                    {
+                        var asset = Activator.CreateInstance(assetType, new object[] { raw.Pointer });
+                        var maps = assetType.GetProperty("actionMaps").GetValue(asset);
+                        var indexer = maps.GetType().GetProperty("Item");
+                        int count = (int)maps.GetType().GetProperty("Count").GetValue(maps);
+                        for (int i = 0; i < count; i++)
+                        {
+                            var m = indexer.GetValue(maps, new object[] { i });
+                            var name = (string)m.GetType().GetProperty("name").GetValue(m);
+                            if (name == "UI Common")
+                            {
+                                m.GetType().GetMethod(enabled ? "Enable" : "Disable").Invoke(m, null);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("[InputBlock] UICommon error: " + ex.Message);
+            }
+
+            AddLog($"[InputBlock] Input {(enabled ? "ODBLOKOWANY" : "ZABLOKOWANY")}");
         }
 
     }

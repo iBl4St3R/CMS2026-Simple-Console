@@ -669,6 +669,13 @@ namespace CMS2026SimpleConsole
             return btn;
         }
 
+        public void FocusInput()
+        {
+            if (_textFieldPtr == IntPtr.Zero) return;
+            var tf = Activator.CreateInstance(_tfType, new object[] { _textFieldPtr });
+            _tfType.GetMethod("Focus")?.Invoke(tf, null);
+        }
+
         private void UpdateLockButtonLabel()
         {
             if (_lockBtnPtr == IntPtr.Zero) return;

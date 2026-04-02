@@ -20,5 +20,7 @@ namespace CMS2026SimpleConsole
         event Action<string> OnCommandSubmitted;
 
         void Destroy();
+
+        void FocusInput();
     }
 }
