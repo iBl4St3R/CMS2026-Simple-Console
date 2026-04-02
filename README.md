@@ -50,9 +50,18 @@ Press **F7** to toggle the console and enter commands:
 ---
 
 ## 📦 Installation
-1. Install **MelonLoader 0.7.2**
-2. Download the latest release
-3. Extract `CMS2026SimpleConsole.dll` into your game's **Mods** folder
+
+### 1. Pre-requisites
+* Ensure you have **MelonLoader v0.7.2 (Open-Beta)** or newer installed for *Car Mechanic Simulator 2026 Demo*.
+
+### 2. Download & Extract
+* Download the latest **CMS 2026 Simple Console** version from the **Releases** section.
+* Extract the contents of the downloaded ZIP archive.
+
+### 3. Copy Files
+* Move the `CMS2026SimpleConsole.dll` from the **Mods** folder in the ZIP to your game's **`Mods`** directory.
+* Move all DLL files from the **UserLibs** folder in the ZIP to your game's **`UserLibs`** directory.
+
 
 **Default path:**
 ```text
@@ -61,7 +70,17 @@ SteamLibrary\steamapps\common\Car Mechanic Simulator 2026 Demo\Mods\
 ---
 
 ## ⚠️ Known Issues
-* None at the moment
+
+### UI Toolkit not loading (Error 0x800711C7)
+You might encounter a `System.IO.FileLoadException` in the MelonLoader console regarding `UnityEngine.TextRenderingModule.dll`. This causes the UI Toolkit interface of this mod to fail, forcing a fallback to the simpler IMGUI renderer.
+
+**Cause:**
+This is **not a bug in the mod**. It is caused by a Windows 11 security feature called **Smart App Control**, which blocks unsigned DLL files generated dynamically by MelonLoader's `Il2CppAssemblyGenerator`.
+
+**Solution:**
+1. Open the **Start Menu** and search for **Smart App Control**.
+2. Set it to **Off** (Note: Windows may require a certain state to change this, or it might be in 'Evaluation' mode).
+
 
 ## 📌 Notes
 * This tool is intended for development and debugging purposes
