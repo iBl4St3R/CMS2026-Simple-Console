@@ -34,14 +34,14 @@ namespace CMS2026SimpleConsole
             if (modAlc != null)
             {
                 modAlc.Resolving += OnAlcResolving;
-                Log.Msg($"[Resolver] Zarejestowano na ALC: {modAlc.Name ?? "unnamed"}");
+                Log.Msg($"[Resolver] Registered on ALC: {modAlc.Name ?? "unnamed"}");
             }
 
             // Fallback na domyślny ALC — na wszelki wypadek
             AppDomain.CurrentDomain.AssemblyResolve += OnAssemblyResolve;
 
             ClassInjector.RegisterTypeInIl2Cpp<CMS2026SimpleConsoleComponent>();
-            Log.Msg("CMS2026 Simple  Console załadowana!");
+            Log.Msg("CMS2026 Simple Console loaded.!");
         }
 
         // .NET 6 ALC resolver
@@ -78,7 +78,7 @@ namespace CMS2026SimpleConsole
             _consoleHost.AddComponent<CMS2026SimpleConsoleComponent>();
             UnityEngine.Object.DontDestroyOnLoad(_consoleHost);
 
-            Log.Msg($"CMS2026SimpleConsoleComponent dodany (scena: {sceneName})");
+            Log.Msg($"CMS2026SimpleConsoleComponent added (scene: {sceneName})");
 
             if (ConsoleComponent != null && ConsoleComponent.Renderer is UIToolkitConsoleRenderer uitR)
                 uitR.ReapplyTopmost();

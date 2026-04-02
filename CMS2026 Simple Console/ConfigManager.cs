@@ -61,7 +61,7 @@ namespace CMS2026SimpleConsole
             if (!File.Exists(_path))
             {
                 Save(); // utwórz plik z domyślnymi
-                _log($"[Config] Utworzono nowy config: {_path}");
+                _log($"[Config] New config created: {_path}");
                 return;
             }
 
@@ -79,7 +79,7 @@ namespace CMS2026SimpleConsole
                 _values[key] = val;
                 loaded++;
             }
-            _log($"[Config] Załadowano {loaded} opcji z {_path}");
+            _log($"[Config] Loaded {loaded} options from {_path}");
         }
 
         private void Save()
@@ -87,7 +87,7 @@ namespace CMS2026SimpleConsole
             var lines = new List<string>
             {
                 "# CMS2026 Simple Console - config",
-                "# Edytuj ręcznie lub używaj komendy: setconfig <klucz> <wartość>",
+                "# Edit manually or use the command: setconfig <key> <value>",
                 ""
             };
 
@@ -99,7 +99,7 @@ namespace CMS2026SimpleConsole
 
         public void PrintAll(Action<string> print)
         {
-            print("[Config] Aktualne ustawienia:");
+            print("[Config] settings:");
             foreach (var kv in _values)
                 print($"  {kv.Key} = {kv.Value}");
         }

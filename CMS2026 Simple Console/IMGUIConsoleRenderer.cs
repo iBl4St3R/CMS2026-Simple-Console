@@ -68,7 +68,7 @@ namespace CMS2026SimpleConsole
 
             _commandInput = GUI.TextField(inputR, _commandInput);
 
-            bool send = GUI.Button(sendR, "Wyślij")
+            bool send = GUI.Button(sendR, "Submit")
                 || (Event.current.isKey
                     && Event.current.keyCode == KeyCode.Return
                     && _commandInput != "");

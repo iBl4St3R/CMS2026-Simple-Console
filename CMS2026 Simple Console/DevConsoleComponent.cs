@@ -53,8 +53,8 @@ namespace CMS2026SimpleConsole
             ConsolePlugin.ConsoleComponent = this;  // ← rejestracja
 
             InitRenderer();
-            _config = new ConfigManager(ConsolePlugin.ModDir, AddLog);
-            AddLog($"[Config] autolock = {_config.GetBool("autolock")}");
+            //_config = new ConfigManager(ConsolePlugin.ModDir, AddLog);
+            //AddLog($"[Config] autolock = {_config.GetBool("autolock")}");
 
             AddLog("[CMS2026SimpleConsole] Awake OK  F7=toggle");
             AddLog("[CMS2026SimpleConsole] Unity " + Application.unityVersion);
@@ -154,11 +154,11 @@ namespace CMS2026SimpleConsole
                 {
                     _renderer.Destroy();
                     _renderer = uitR;
-                    AddLog("[Renderer] Przełączono na UIToolkit");
+                    AddLog("[Renderer] Switched to UIToolkit");
                 }
                 else
                 {
-                    AddLog("[Renderer] UIToolkit niedostępny");
+                    AddLog("[Renderer] UIToolkit inaccessible");
                 }
             }
             else
@@ -168,7 +168,7 @@ namespace CMS2026SimpleConsole
                 imgui.OnCommandSubmitted += HandleCommand;
                 imgui.Initialize();
                 _renderer = imgui;
-                AddLog("[Renderer] Przełączono na IMGUI");
+                AddLog("[Renderer] Switched to IMGUI");
             }
         }
 
@@ -196,21 +196,21 @@ namespace CMS2026SimpleConsole
                         break;
 
 
-                    case "setconfig":
-                        if (_cmdParts.Length < 3)
-                        {
-                            AddLog("Usage: setconfig <klucz> <wartość>");
-                            AddLog("Przykład: setconfig autolock true");
-                            break;
-                        }
-                        _config.Set(_cmdParts[1], _cmdParts[2]);
-                        AddLog($"[Config] {_cmdParts[1]} = {_cmdParts[2]} (zapisano)");
-                        ApplyConfig(); // zastosuj od razu
-                        break;
+                    //case "setconfig":
+                    //    if (_cmdParts.Length < 3)
+                    //    {
+                    //        AddLog("Usage: setconfig <klucz> <wartość>");
+                    //        AddLog("Przykład: setconfig autolock true");
+                    //        break;
+                    //    }
+                    //    _config.Set(_cmdParts[1], _cmdParts[2]);
+                    //    AddLog($"[Config] {_cmdParts[1]} = {_cmdParts[2]} (zapisano)");
+                    //    ApplyConfig(); // zastosuj od razu
+                    //    break;
 
-                    case "config":
-                        _config.PrintAll(AddLog);
-                        break;
+                    //case "config":
+                    //    _config.PrintAll(AddLog);
+                    //    break;
 
 
                     case "resetscene":
@@ -244,8 +244,7 @@ namespace CMS2026SimpleConsole
                         AddLog($"Added {exp} EXP. Level: {Il2CppCMS.Player.PlayerData.PlayerLevel}");
                         break;
 
-                    case "removedemowall":
-                    case "removedemo":
+                    case "removedemowalls":
                         RemoveDemoWalls();
                         break;
 
@@ -275,28 +274,23 @@ namespace CMS2026SimpleConsole
                         }
                         break;
 
-                    case "renderer":
-                        AddLog("Renderer: " +
-                            (_renderer is UIToolkitConsoleRenderer ? "UIToolkit" : "IMGUI"));
-                        break;
 
                     case "help":
-                        AddLog("Komendy:");
-                        AddLog("  run <C# code>       – uruchom C# w runtime");
-                        AddLog("  setconfig <k> <v>   – ustaw opcję i zapisz do pliku");
-                        AddLog("  config               – pokaż wszystkie opcje");
-                        AddLog("  Opcje: autolock=true/false");
-                        AddLog("  resetscene           – reload sceny garazu");
-                        AddLog("  charspeed <n>        – predkosc gracza");
-                        AddLog("  addexp [n]           – dodaj EXP (domyslnie 1000)");
-                        AddLog("  removedemowall       – wylacz limity demo");
-                        AddLog("  find <name>          – szukaj GameObjects");
-                        AddLog("  scenes               – lista scen");
-                        AddLog("  renderer             – pokaz aktywny renderer");
+                        AddLog("Commands:");
+                        AddLog("  run <C# code>       – Compile and run the C# code.");
+                        //AddLog("  setconfig <k> <v>   – ustaw opcję i zapisz do pliku");
+                        //AddLog("  config               – pokaż wszystkie opcje");
+                        //AddLog("  Opcje: autolock=true/false");
+                        AddLog("  resetscene           – reload garage scene");
+                        AddLog("  charspeed <n>        – player walk speed");
+                        AddLog("  addexp [n]           – add EXP (default: 1000)");
+                        AddLog("  removedemowalls       – turn off demo walls");
+                        AddLog("  find <name>          – search for game objects by name");
+                        AddLog("  scenes               – scene List");
                         break;
 
                     default:
-                        AddLog("[?] Nieznana komenda: " + cmd + "  (wpisz 'help')");
+                        AddLog("[?] Unknown command: " + cmd + "  (type 'help')");
                         break;
                 }
             }
@@ -310,11 +304,11 @@ namespace CMS2026SimpleConsole
         // ── Helpers ──────────────────────────────────────────────────────────────
         private void CopyToClipboard()
         {
-            if (_logLines.Count == 0) { AddLog("Brak logow."); return; }
+            if (_logLines.Count == 0) { AddLog("No logs."); return; }
             var sb = new StringBuilder();
             foreach (var l in _logLines) sb.AppendLine(l);
             GUIUtility.systemCopyBuffer = sb.ToString();
-            AddLog("Log skopiowany do schowka.");
+            AddLog("Log copied to clipboard.");
         }
 
         private void RemoveDemoWalls()
@@ -358,9 +352,9 @@ namespace CMS2026SimpleConsole
             // odbywa się lazy w SetGameInputEnabled przy pierwszym wywołaniu
             var assetType = System.Type.GetType("UnityEngine.InputSystem.InputActionAsset, Unity.InputSystem");
             if (assetType == null)
-                AddLog("[InputBlock] BRAK: Unity.InputSystem");
+                AddLog("[InputBlock] MISSING: Unity.InputSystem");
             else
-                AddLog("[InputBlock] OK — przycisk 'Lock Input' gotowy");
+                AddLog("[InputBlock] OK — 'Lock Input' button ready");
         }
 
 
@@ -368,7 +362,7 @@ namespace CMS2026SimpleConsole
         {
             _inputLocked = !_inputLocked;
             SetGameInputEnabled(!_inputLocked);
-            AddLog(_inputLocked ? "[InputBlock] Input ZABLOKOWANY" : "[InputBlock] Input ODBLOKOWANY");
+            
         }
 
         private void SetGameInputEnabled(bool enabled)
@@ -425,20 +419,7 @@ namespace CMS2026SimpleConsole
                 AddLog("[InputBlock] UICommon error: " + ex.Message);
             }
 
-            AddLog($"[InputBlock] Input {(enabled ? "ODBLOKOWANY" : "ZABLOKOWANY")}");
         }
 
     }
 }
-//```
-
-//---
-
-//### Co gdzie i dlaczego
-
-//**Przepływ sterowania: **
-//```
-//F7 → _renderer.SetVisible()
-//Klawiatura (UIToolkit) → HandleKeyboard() w OnUpdate()
-//Klawiatura (IMGUI) → GUI.TextField w OnGUI()
-//Oba → OnCommandSubmitted → HandleCommand() w komponencie

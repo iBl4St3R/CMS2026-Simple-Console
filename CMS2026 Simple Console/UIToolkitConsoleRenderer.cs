@@ -266,7 +266,7 @@ namespace CMS2026SimpleConsole
             SColor(s, Color.white);
             SFont(s);
             _lblType.GetProperty("text").SetValue(lbl,
-                "  CMS2026 Simple Console  [F7=hide]");
+                "  CMS2026 Simple Console  [F7=hide] [UIToolkit]");
             AddChild(panel, lbl);
         }
 
@@ -312,7 +312,7 @@ namespace CMS2026SimpleConsole
 
             RegisterSubmitCallback(_textFieldPtr);
 
-            MakeButton(panel, "Wyślij",
+            MakeButton(panel, "Submit",
                 PanelW - 102f, rowTop, 98f, InputH,
                 new Color(0.15f, 0.5f, 0.15f, 1f),
                 () => SubmitTextField());
@@ -456,7 +456,7 @@ namespace CMS2026SimpleConsole
             {
                 // Krok 1 — szukaj assembly
                 var allAsm = AppDomain.CurrentDomain.GetAssemblies();
-                _log($"[UIToolkit] Załadowane assemblies: {allAsm.Length}");
+                _log($"[UIToolkit] Loaded assemblies: {allAsm.Length}");
 
                 _ueAsm = allAsm.FirstOrDefault(a => a.GetName().Name == "UnityEngine.UIElementsModule");
                 _trAsm = allAsm.FirstOrDefault(a => a.GetName().Name == "UnityEngine.TextRenderingModule");
@@ -485,7 +485,7 @@ namespace CMS2026SimpleConsole
 
                 // Krok 4 — FindObjectsOfTypeAll
                 var allPS = Resources.FindObjectsOfTypeAll(il2cppPsType);
-                _log($"[UIToolkit] PanelSettings znalezione: {allPS.Length}");
+                _log($"[UIToolkit] PanelSettings found: {allPS.Length}");
 
                 // Krok 4 — już nie potrzebujemy FindObjectsOfTypeAll
                 // przejdź od razu do init
@@ -497,7 +497,7 @@ namespace CMS2026SimpleConsole
 
                 _initialized = true;
                 RebuildAllLines();
-                _log("[UIToolkit] Renderer zainicjalizowany OK");
+                _log("[UIToolkit] Renderer initialized successfully.");
                 return true;
             }
             catch (Exception ex)
