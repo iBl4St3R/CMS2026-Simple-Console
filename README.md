@@ -4,6 +4,7 @@
 ---
 
 ## 📖 Overview
+<img src="preview.png" align="right" width="400" alt="Console Preview">
 **CMS 2026 Simple Console** is a developer-oriented tool created for modders and advanced users.  
 It provides a powerful and transparent way to inspect, debug, and interact with the game built on the Unity 6 engine.
 
@@ -52,7 +53,7 @@ Press **F7** to toggle the console and enter commands:
 ## 📦 Installation
 
 ### 1. Pre-requisites
-* Ensure you have **MelonLoader v0.7.2 (Open-Beta)** or newer installed for *Car Mechanic Simulator 2026 Demo*.
+* Ensure you have **MelonLoader v0.7.2 (Open-Beta)** installed for *Car Mechanic Simulator 2026 Demo*.
 
 ### 2. Download & Extract
 * Download the latest **CMS 2026 Simple Console** version from the **Releases** section.
@@ -63,9 +64,9 @@ Press **F7** to toggle the console and enter commands:
 * Move all DLL files from the **UserLibs** folder in the ZIP to your game's **`UserLibs`** directory.
 
 
-**Default path:**
+**Default game path:**
 ```text
-SteamLibrary\steamapps\common\Car Mechanic Simulator 2026 Demo\Mods\
+SteamLibrary\steamapps\common\Car Mechanic Simulator 2026 Demo\
 ```
 ---
 
