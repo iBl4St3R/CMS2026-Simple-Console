@@ -35,9 +35,12 @@ namespace CMS2026SimpleConsole
        
         private string[] _cmdParts;
 
-        private string DumpDir =>
-            Path.Combine(ConsolePlugin.ModDir, "CMS2026SimpleConsole");
+        private string DumpDir => Path.Combine(ConsolePlugin.ModDir, "CMS2026SimpleConsole");
 
+
+        private ConfigManager _config;
+        private CursorLockMode _savedLockState;
+        private bool _savedCursorVisible;
 
         public IConsoleRenderer Renderer => _renderer;
         // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -47,6 +50,8 @@ namespace CMS2026SimpleConsole
             ConsolePlugin.ConsoleComponent = this;  // ← rejestracja
 
             InitRenderer();
+            _config = new ConfigManager(ConsolePlugin.ModDir, AddLog);
+            AddLog($"[Config] autolock = {_config.GetBool("autolock")}");
 
             AddLog("[CMS2026SimpleConsole] Awake OK  F7=toggle");
             AddLog("[CMS2026SimpleConsole] Unity " + Application.unityVersion);
@@ -78,10 +83,34 @@ namespace CMS2026SimpleConsole
             _renderer = imguiRenderer;
         }
 
+
+
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.F7))
-                _renderer.SetVisible(!_renderer.IsVisible);
+            {
+                bool nowVisible = !_renderer.IsVisible;
+                _renderer.SetVisible(nowVisible);
+
+                if (nowVisible)
+                {
+                    // Konsola otwiera się — zapamiętaj stan kursora i pokaż go
+                    _savedLockState = Cursor.lockState;
+                    _savedCursorVisible = Cursor.visible;
+                    Cursor.lockState = CursorLockMode.None;
+                    Cursor.visible = true;
+                }
+                else
+                {
+                    // Konsola zamyka się — przywróć stan kursora sprzed otwarcia
+                    Cursor.lockState = _savedLockState;
+                    Cursor.visible = _savedCursorVisible;
+                }
+
+                // AutoLock
+                if (_config != null && _config.GetBool("autolock"))
+                    ToggleInputLock();
+            }
 
             _renderer.OnUpdate();
         }
@@ -154,20 +183,39 @@ namespace CMS2026SimpleConsole
             {
                 switch (cmd)
                 {
+                    
+                    case "run":
+                    case "eval":
+                        string code = raw.Substring(cmd.Length).Trim();
+                        if (_repl == null) { AddLog("[eval] ERROR: REPL not init!"); break; }
+                        if (string.IsNullOrEmpty(code)) AddLog("[eval] Usage: eval <C# code>");
+                        else _repl.Evaluate(code);
+                        break;
+
+
+                    case "setconfig":
+                        if (_cmdParts.Length < 3)
+                        {
+                            AddLog("Usage: setconfig <klucz> <wartość>");
+                            AddLog("Przykład: setconfig autolock true");
+                            break;
+                        }
+                        _config.Set(_cmdParts[1], _cmdParts[2]);
+                        AddLog($"[Config] {_cmdParts[1]} = {_cmdParts[2]} (zapisano)");
+                        ApplyConfig(); // zastosuj od razu
+                        break;
+
+                    case "config":
+                        _config.PrintAll(AddLog);
+                        break;
+
+
                     case "resetscene":
                         AddLog("Reloading garage scene...");
                         if (SceneLoader.Instance != null)
                             SceneLoader.Instance.LoadScene("Garage");
                         else
                             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
-                        break;
-
-                    case "eval":
-                    case "run":
-                        string code = raw.Substring(cmd.Length).Trim();
-                        if (_repl == null) { AddLog("[eval] ERROR: REPL not init!"); break; }
-                        if (string.IsNullOrEmpty(code)) AddLog("[eval] Usage: eval <C# code>");
-                        else _repl.Evaluate(code);
                         break;
 
                     case "charspeed":
@@ -231,8 +279,11 @@ namespace CMS2026SimpleConsole
 
                     case "help":
                         AddLog("Komendy:");
+                        AddLog("  run <C# code>       – uruchom C# w runtime");
+                        AddLog("  setconfig <k> <v>   – ustaw opcję i zapisz do pliku");
+                        AddLog("  config               – pokaż wszystkie opcje");
+                        AddLog("  Opcje: autolock=true/false");
                         AddLog("  resetscene           – reload sceny garazu");
-                        AddLog("  eval <C# code>       – uruchom C# w runtime");
                         AddLog("  charspeed <n>        – predkosc gracza");
                         AddLog("  addexp [n]           – dodaj EXP (domyslnie 1000)");
                         AddLog("  removedemowall       – wylacz limity demo");
@@ -291,6 +342,12 @@ namespace CMS2026SimpleConsole
             ConsolePlugin.Log.Msg(line);
         }
 
+        private void ApplyConfig()
+        {
+            // na razie tylko autolock — tu będziemy dodawać kolejne opcje
+            bool autolock = _config.GetBool("autolock");
+            AddLog($"[Config] autolock = {autolock}");
+        }
 
         private void InitInputBlocking()
         {
