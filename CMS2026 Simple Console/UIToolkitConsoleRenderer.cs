@@ -8,9 +8,6 @@ namespace CMS2026SimpleConsole
 {
     public class UIToolkitConsoleRenderer : IConsoleRenderer
     {
-
-
-
         private readonly Action<string> _log;
         private readonly List<string> _logLines;
 
@@ -19,44 +16,20 @@ namespace CMS2026SimpleConsole
         private Assembly _trAsm;
 
         // ── Types ───────────────────────────────────────────────────────────────
-        private Type _veType;
-        private Type _lblType;
-        private Type _btnType;
-        private Type _clickableType;
-        private Type _sType;
-        private Type _slType;
-        private Type _scType;
-        private Type _posType;
-        private Type _spType;
-        private Type _ofType;
-        private Type _soType;
-        private Type _fontDefType;
-        private Type _sfdType;
-        private Type _displayType;
-        private Type _sdType;
-
-        private Type _alignType;
-        private Type _saType;
-        private Type _justifyType;
-        private Type _sjType;
-
-        private Type _taType;   // UnityEngine.TextAnchor
-        private Type _staType;  // StyleEnum<TextAnchor>
-        private ConstructorInfo _staCtor;
-
+        private Type _veType, _lblType, _btnType, _clickableType;
+        private Type _sType, _slType, _scType;
+        private Type _posType, _spType, _ofType, _soType;
+        private Type _fontDefType, _sfdType;
+        private Type _displayType, _sdType;
+        private Type _alignType, _saType, _justifyType, _sjType;
+        private Type _taType, _staType;
         private Type _tfType;
-        private IntPtr _textFieldPtr;
+        private Type _sfType;
 
         // ── Constructors ────────────────────────────────────────────────────────
-        private ConstructorInfo _slCtor;
-        private ConstructorInfo _scCtor;
-        private ConstructorInfo _spCtor;
-        private ConstructorInfo _soCtor;
-        private ConstructorInfo _sfdCtor;
-        private ConstructorInfo _sdCtor;
-
-        private ConstructorInfo _saCtor;
-        private ConstructorInfo _sjCtor;
+        private ConstructorInfo _slCtor, _scCtor, _spCtor, _soCtor;
+        private ConstructorInfo _sfdCtor, _sdCtor, _saCtor, _sjCtor;
+        private ConstructorInfo _staCtor, _sfCtor;
 
         // ── Font ────────────────────────────────────────────────────────────────
         private object _fontDef;
@@ -78,37 +51,46 @@ namespace CMS2026SimpleConsole
         // ── IL2CPP pointers ─────────────────────────────────────────────────────
         private IntPtr _panelPtr;
         private IntPtr _contentPtr;
-        private IntPtr _inputLblPtr;
+        private IntPtr _textFieldPtr;
         private GameObject _go;
+        private IntPtr _psPtr;
 
-        // ── State ───────────────────────────────────────────────────────────────
-        private bool _initialized;
-        private bool _initFailed;       // trwały błąd — nie próbuj więcej
-        private bool _visible = true;
-        private string _commandInput = "";
+        // ── Log scroll ──────────────────────────────────────────────────────────
         private float _scrollY;
         private float _currentY;
+        private IntPtr _logViewportPtr;
+
+        // ── Config panel ─────────────────────────────────────────────────────────
+        private IntPtr _configPanelPtr;
+        private IntPtr _configContentPtr;
+        private IntPtr _configBtnPtr;
+        private float _configScrollY = 0f;
+        private float _configContentH = 0f;
+
+        // Config toggle button pointers keyed by config key
+        private readonly Dictionary<string, IntPtr> _cfgToggleBtns = new Dictionary<string, IntPtr>();
+
+        // ── Animation ────────────────────────────────────────────────────────────
+        private float _animProgress = 0f;
+        private float _animTarget = 0f;
+        private const float AnimSpeed = 5f;
+
+        // ── Style float ──────────────────────────────────────────────────────────
+        // (opacity)
+
+        // ── Drag ────────────────────────────────────────────────────────────────
         private bool _dragging;
         private Vector2 _dragOffset;
 
-        private IntPtr _psPtr;
-
-        // ── Config animation ─────────────────────────────────────────────────────
-        private float _animProgress = 0f;   // 0 = log visible, 1 = config visible
-        private float _animTarget = 0f;
-        private const float AnimSpeed = 5f; // jednostki/sekunda (0→1)
-
-        private IntPtr _logViewportPtr;     // outer viewport (save w BuildLogArea)
-        private IntPtr _configPanelPtr;
-        private IntPtr _configBtnPtr;
-
-        // StyleFloat (opacity) ────────────────────────────────────────────────────
-        private Type _sfType;
-        private ConstructorInfo _sfCtor;
+        // ── State ────────────────────────────────────────────────────────────────
+        private bool _initialized;
+        private bool _initFailed;
+        private bool _visible = true;
+        private string _commandInput = "";
 
         public bool InitFailed => _initFailed;
 
-        // ── Interface ────────────────────────────────────────────────────────────
+        // ── Interface ─────────────────────────────────────────────────────────────
         public bool IsVisible => _visible;
         public string CommandInput { get => _commandInput; set => _commandInput = value; }
         public event Action<string> OnCommandSubmitted;
@@ -116,7 +98,7 @@ namespace CMS2026SimpleConsole
         private bool _inputLocked = false;
         private IntPtr _lockBtnPtr;
 
-        // ────────────────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────────
         public UIToolkitConsoleRenderer(Action<string> log, List<string> logLines)
         {
             _log = log;
@@ -124,20 +106,50 @@ namespace CMS2026SimpleConsole
         }
 
         // ── Initialize ───────────────────────────────────────────────────────────
-        public void Initialize()
+        public void Initialize() { }
+
+        // ── TryInit ──────────────────────────────────────────────────────────────
+        public bool TryInit()
         {
-            //_ueAsm = AppDomain.CurrentDomain.GetAssemblies()
-            //    .First(a => a.GetName().Name == "UnityEngine.UIElementsModule");
-            //_trAsm = AppDomain.CurrentDomain.GetAssemblies()
-            //    .First(a => a.GetName().Name == "UnityEngine.TextRenderingModule");
+            try
+            {
+                var allAsm = AppDomain.CurrentDomain.GetAssemblies();
+                _log($"[UIToolkit] Loaded assemblies: {allAsm.Length}");
 
-            //ResolveTypes();
-            //ResolveCtors();
-            //SetupFont();
-            //BuildUI();
+                _ueAsm = allAsm.FirstOrDefault(a => a.GetName().Name == "UnityEngine.UIElementsModule");
+                _trAsm = allAsm.FirstOrDefault(a => a.GetName().Name == "UnityEngine.TextRenderingModule");
 
-            //_initialized = true;
-            //_log("[UIToolkit] Renderer zainicjalizowany OK");
+                if (_ueAsm == null) { _log("[UIToolkit] MISSING: UnityEngine.UIElementsModule"); return false; }
+                if (_trAsm == null) { _log("[UIToolkit] MISSING: UnityEngine.TextRenderingModule"); return false; }
+
+                var psType = _ueAsm.GetType("UnityEngine.UIElements.PanelSettings");
+                if (psType == null) { _log("[UIToolkit] MISSING type: PanelSettings"); return false; }
+
+                Il2CppSystem.Type il2cppPsType;
+                try { il2cppPsType = Il2CppInterop.Runtime.Il2CppType.From(psType); }
+                catch (Exception ex) { _log($"[UIToolkit] Il2CppType.From failed: {ex.Message}"); return false; }
+
+                ResolveTypes();
+                ResolveCtors();
+                SetupFont();
+                BuildUI();
+
+                _initialized = true;
+                RebuildAllLines();
+                _log("[UIToolkit] Renderer initialized successfully.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                var inner = ex.InnerException;
+                while (inner?.InnerException != null) inner = inner.InnerException;
+                _log($"[UIToolkit] Init error: {ex.GetType().Name}: {ex.Message}");
+                if (inner != null && inner != ex)
+                    _log($"[UIToolkit] Inner: {inner.GetType().Name}: {inner.Message}");
+                _log($"[UIToolkit] Stack: {(inner ?? ex).StackTrace?.Split('\n')[0]}");
+                _initFailed = true;
+                return false;
+            }
         }
 
         // ── Type resolution ──────────────────────────────────────────────────────
@@ -155,24 +167,20 @@ namespace CMS2026SimpleConsole
             _tfType = _ueAsm.GetType("UnityEngine.UIElements.TextField");
 
             _posType = _ueAsm.GetType("UnityEngine.UIElements.Position");
-            _spType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1")
-                             .MakeGenericType(_posType);
+            _spType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_posType);
 
             _ofType = _ueAsm.GetType("UnityEngine.UIElements.Overflow");
-            _soType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1")
-                             .MakeGenericType(_ofType);
+            _soType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_ofType);
 
             _displayType = _ueAsm.GetType("UnityEngine.UIElements.DisplayStyle");
-            _sdType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1")
-                                 .MakeGenericType(_displayType);
+            _sdType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_displayType);
 
             _alignType = _ueAsm.GetType("UnityEngine.UIElements.Align");
             _saType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_alignType);
             _justifyType = _ueAsm.GetType("UnityEngine.UIElements.Justify");
             _sjType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_justifyType);
 
-            // FIX: TextAnchor dla unityTextAlign
-            _taType = typeof(UnityEngine.TextAnchor);   // z Il2Cpp interop
+            _taType = typeof(UnityEngine.TextAnchor);
             _staType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_taType);
 
             _sfType = _ueAsm.GetType("UnityEngine.UIElements.StyleFloat");
@@ -186,25 +194,19 @@ namespace CMS2026SimpleConsole
             _soCtor = _soType.GetConstructor(new Type[] { _ofType });
             _sfdCtor = _sfdType.GetConstructor(new Type[] { _fontDefType });
             _sdCtor = _sdType.GetConstructor(new Type[] { _displayType });
-
             _saCtor = _saType.GetConstructor(new Type[] { _alignType });
             _sjCtor = _sjType.GetConstructor(new Type[] { _justifyType });
-
-            
             _staCtor = _staType.GetConstructor(new Type[] { _taType });
             _sfCtor = _sfType.GetConstructor(new[] { typeof(float) });
         }
 
-        // ── Font ─────────────────────────────────────────────────────────────────
         private void SetupFont()
         {
             var fontType = _trAsm.GetType("UnityEngine.Font");
             var builtinFont = Resources.GetBuiltinResource(
                 Il2CppInterop.Runtime.Il2CppType.From(fontType), "LegacyRuntime.ttf");
-            var fontWrapped = Activator.CreateInstance(fontType,
-                new object[] { builtinFont.Pointer });
-            _fontDef = _fontDefType.GetMethod("FromFont")
-                .Invoke(null, new object[] { fontWrapped });
+            var fontWrapped = Activator.CreateInstance(fontType, new object[] { builtinFont.Pointer });
+            _fontDef = _fontDefType.GetMethod("FromFont").Invoke(null, new object[] { fontWrapped });
         }
 
         // ── Build UI ─────────────────────────────────────────────────────────────
@@ -214,14 +216,12 @@ namespace CMS2026SimpleConsole
             var docType = _ueAsm.GetType("UnityEngine.UIElements.UIDocument");
             var smType = _ueAsm.GetType("UnityEngine.UIElements.PanelScaleMode");
 
-            // NOWE — własny PanelSettings zamiast kraść od gry
             var il2cppPsType = Il2CppInterop.Runtime.Il2CppType.From(psType);
             var psRaw = UnityEngine.ScriptableObject.CreateInstance(il2cppPsType);
             var psWrap = Activator.CreateInstance(psType, new object[] { psRaw.Pointer });
             _psPtr = psRaw.Pointer;
 
-            psType.GetProperty("scaleMode").SetValue(psWrap,
-                Enum.Parse(smType, "ConstantPixelSize"));
+            psType.GetProperty("scaleMode").SetValue(psWrap, Enum.Parse(smType, "ConstantPixelSize"));
             psType.GetProperty("scale").SetValue(psWrap, 1.0f);
             psType.GetProperty("sortingOrder").SetValue(psWrap, 9999);
 
@@ -229,8 +229,7 @@ namespace CMS2026SimpleConsole
             UnityEngine.Object.DontDestroyOnLoad(_go);
 
             var docRaw = _go.AddComponent(Il2CppInterop.Runtime.Il2CppType.From(docType));
-            var docWrap = Activator.CreateInstance(docType,
-                new object[] { ((Component)docRaw).Pointer });
+            var docWrap = Activator.CreateInstance(docType, new object[] { ((Component)docRaw).Pointer });
             docType.GetProperty("panelSettings").SetValue(docWrap, psWrap);
 
             var root = docType.GetProperty("rootVisualElement").GetValue(docWrap);
@@ -240,22 +239,18 @@ namespace CMS2026SimpleConsole
         private void BuildPanel(object root)
         {
             var panel = VE();
-            var panelStyle = Style(panel);
-            SPosition(panelStyle, "Absolute");
-            SLeft(panelStyle, _panelX);
-            STop(panelStyle, _panelY);
-            SWidth(panelStyle, PanelW);
-            SHeight(panelStyle, PanelH);
-            SBg(panelStyle, new Color(0.08f, 0.08f, 0.1f, 0.93f));
-            SOverflow(panelStyle, "Hidden");
+            var s = Style(panel);
+            SPosition(s, "Absolute");
+            SLeft(s, _panelX); STop(s, _panelY);
+            SWidth(s, PanelW); SHeight(s, PanelH);
+            SBg(s, new Color(0.08f, 0.08f, 0.1f, 0.93f));
+            SOverflow(s, "Hidden");
             AddChild(root, panel);
             _panelPtr = Ptr(panel);
 
             BuildTitleBar(panel);
             BuildLogArea(panel);
-
-            BuildConfigPanel(panel);  
-
+            BuildConfigPanel(panel);
             BuildInputRow(panel);
             BuildButtonRow(panel);
             BuildSignature(panel);
@@ -273,6 +268,7 @@ namespace CMS2026SimpleConsole
             psType.GetProperty("scaleMode").SetValue(psWrap, Enum.Parse(smType, "ConstantPixelSize"));
             psType.GetProperty("scale").SetValue(psWrap, 1.0f);
         }
+
         private void BuildTitleBar(object panel)
         {
             var lbl = Activator.CreateInstance(_lblType);
@@ -300,7 +296,6 @@ namespace CMS2026SimpleConsole
             SBg(vs, new Color(0f, 0f, 0f, 0.6f));
             SOverflow(vs, "Hidden");
             AddChild(panel, viewport);
-
             _logViewportPtr = Ptr(viewport);
 
             var content = VE();
@@ -319,17 +314,13 @@ namespace CMS2026SimpleConsole
             var tf = Activator.CreateInstance(_tfType);
             var s = Style(tf);
             SPosition(s, "Absolute");
-            SLeft(s, Pad);
-            STop(s, rowTop);
-            SWidth(s, PanelW - 110f);
-            SHeight(s, InputH);
+            SLeft(s, Pad); STop(s, rowTop);
+            SWidth(s, PanelW - 110f); SHeight(s, InputH);
             SBg(s, new Color(0.04f, 0.04f, 0.07f, 1f));
             SColor(s, new Color(0.85f, 1f, 0.85f, 1f));
             SFont(s);
-
             AddChild(panel, tf);
             _textFieldPtr = Ptr(tf);
-
             RegisterSubmitCallback(_textFieldPtr);
 
             MakeButton(panel, "Submit",
@@ -378,100 +369,215 @@ namespace CMS2026SimpleConsole
         {
             float rowTop = TitleH + Pad + LogViewH + Pad + InputH + Pad;
 
-            MakeButton(panel, "Clear",Pad, rowTop, 80f, BtnBarH,new Color(0.45f, 0.12f, 0.12f, 1f),() => OnCommandSubmitted?.Invoke("__clear"));
+            MakeButton(panel, "Clear",
+                Pad, rowTop, 80f, BtnBarH,
+                new Color(0.45f, 0.12f, 0.12f, 1f),
+                () => OnCommandSubmitted?.Invoke("__clear"));
 
-            MakeButton(panel, "Help",Pad + 84f, rowTop, 80f, BtnBarH,new Color(0.18f, 0.28f, 0.5f, 1f),() => OnCommandSubmitted?.Invoke("help"));
+            MakeButton(panel, "Help",
+                Pad + 84f, rowTop, 80f, BtnBarH,
+                new Color(0.18f, 0.28f, 0.5f, 1f),
+                () => OnCommandSubmitted?.Invoke("help"));
 
-            MakeButton(panel, "Copy log",Pad + 168f, rowTop, 90f, BtnBarH,new Color(0.18f, 0.28f, 0.5f, 1f),() => OnCommandSubmitted?.Invoke("__copylog"));
+            MakeButton(panel, "Copy log",
+                Pad + 168f, rowTop, 90f, BtnBarH,
+                new Color(0.18f, 0.28f, 0.5f, 1f),
+                () => OnCommandSubmitted?.Invoke("__copylog"));
 
-            MakeButton(panel, "→ IMGUI",Pad + 262f, rowTop, 90f, BtnBarH,new Color(0.3f, 0.2f, 0.45f, 1f),() => OnCommandSubmitted?.Invoke("__switchrenderer"));
-
-            // ── Config toggle ─────────────────────────────────────────────────────
-            var cfgBtn = MakeButtonWithPtr(panel, "⚙  Config",Pad + 356f, rowTop, 92f, BtnBarH,new Color(0.15f, 0.38f, 0.28f, 1f),ToggleConfig);
+            // → IMGUI moved to config panel. "⚙ Config" takes its old slot.
+            var cfgBtn = MakeButtonWithPtr(panel, "⚙  Config",
+                Pad + 262f, rowTop, 92f, BtnBarH,
+                new Color(0.15f, 0.38f, 0.28f, 1f),
+                ToggleConfig);
             _configBtnPtr = Ptr(cfgBtn);
         }
 
         private void BuildSignature(object panel)
         {
             float rowTop = TitleH + Pad + LogViewH + Pad + InputH + Pad;
+            string sigLabel = $"SC {ConsolePlugin.Version} by Blaster";
 
-            MakeButtonLink(Wrap(_panelPtr), "by Blaster",PanelW - 82f, rowTop, 78f, BtnBarH,() => Application.OpenURL("https://github.com/iBl4St3R/CMS2026-Simple-Console"));
+            MakeButtonLink(Wrap(_panelPtr), sigLabel,
+                PanelW - 148f, rowTop, 144f, BtnBarH,
+                () => Application.OpenURL("https://github.com/iBl4St3R/CMS2026-Simple-Console"));
         }
 
-        private void MakeButtonLink(object parent, string label, float x, float y, float w, float h, Action onClick)
-        {
-            var btn = MakeButtonWithPtr(parent, label, x, y, w, h, new Color(0f, 0f, 0f, 0f), onClick);
-            var s = Style(btn);
-            SColor(s, new Color(0.4f, 0.7f, 1f, 1f)); // niebieski
-        }
-
-
-        private void MakeButton(object parent,string label, float x, float y, float w, float h,Color bg, Action onClick)
-        {
-            MakeButtonWithPtr(parent, label, x, y, w, h, bg, onClick);
-        }
-
-        // ── Config panel ─────────────────────────────────────────────────────────
-
+        // ── Config panel ──────────────────────────────────────────────────────────
         private void BuildConfigPanel(object panel)
         {
             float vpTop = TitleH + Pad;
 
+            // Outer animated viewport
             var cfg = VE();
             var s = Style(cfg);
             SPosition(s, "Absolute");
-            SLeft(s, Pad);
-            STop(s, vpTop);
-            SWidth(s, PanelW - Pad * 2);
-            SHeight(s, LogViewH);
+            SLeft(s, Pad); STop(s, vpTop);
+            SWidth(s, PanelW - Pad * 2); SHeight(s, LogViewH);
             SBg(s, new Color(0.04f, 0.06f, 0.10f, 1f));
             SOverflow(s, "Hidden");
             SOpacity(s, 0f);
             AddChild(panel, cfg);
             _configPanelPtr = Ptr(cfg);
-
-            // Zacznij ukryty — żeby nie łapał zdarzeń myszy
             ApplyDisplay(_configPanelPtr, false);
 
-            // ── Header ───────────────────────────────────────────────────────────
-            CfgLabel(cfg, "⚙   Configuration",
-                Pad, 12f, PanelW - Pad * 4, 26f,
+            // Inner scrollable content container
+            var content = VE();
+            var cs = Style(content);
+            SPosition(cs, "Absolute");
+            SLeft(cs, 0f); STop(cs, 0f);
+            SWidth(cs, PanelW - Pad * 2);
+            AddChild(cfg, content);
+            _configContentPtr = Ptr(content);
+
+            // ── Build config items ───────────────────────────────────────────────
+            float y = 12f;
+            _cfgToggleBtns.Clear();
+
+            // Header
+            CfgLabel(content, "⚙   Configuration",
+                Pad, y, PanelW - Pad * 4, 26f,
                 new Color(0.55f, 0.80f, 1.00f, 1f), fontSize: 13);
+            y += 30f;
 
-            CfgDivider(cfg, 44f, new Color(0.30f, 0.45f, 0.75f, 0.8f));
+            CfgDivider(content, y, new Color(0.30f, 0.45f, 0.75f, 0.8f));
+            y += 10f;
 
-            // ── Sekcja: Renderer ─────────────────────────────────────────────────
-            CfgSectionLabel(cfg, "RENDERER", 54f);
-            float y = 74f;
-            CfgRow(cfg, "Use UIToolkit renderer", "Active", new Color(0.20f, 0.70f, 0.35f, 1f), ref y);
-            CfgRow(cfg, "Fallback to IMGUI on error", "ON", new Color(0.20f, 0.50f, 0.70f, 1f), ref y);
+            // Mod Folder button
+            MakeButton(content, "Mod Folder",
+                Pad, y, 100f, 24f,
+                new Color(0.18f, 0.28f, 0.48f, 1f),
+                () => OnCommandSubmitted?.Invoke("__openfolder"));
+            y += 36f;
 
-            CfgDivider(cfg, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
+            CfgDivider(content, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
             y += 14f;
 
-            // ── Sekcja: Konsola ──────────────────────────────────────────────────
-            CfgSectionLabel(cfg, "CONSOLE", y);
-            y += 20f;
-            CfgRow(cfg, "Show timestamps in log", "ON", new Color(0.20f, 0.50f, 0.70f, 1f), ref y);
-            CfgRow(cfg, "Lock game input when open", "ON", new Color(0.20f, 0.50f, 0.70f, 1f), ref y);
-            CfgRow(cfg, "Max log lines (2000)", "SOON", new Color(0.35f, 0.35f, 0.40f, 1f), ref y);
+            // ── RENDERER ────────────────────────────────────────────────────────
+            CfgSectionLabel(content, "RENDERER", y);
+            y += 22f;
 
-            CfgDivider(cfg, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
+            CfgToggleRow(content, "UIToolkit priority  (restart required)", "uitoolkit_priority", ref y);
+
+            // Switch to IMGUI
+            MakeButton(content, "Switch to IMGUI",
+                PanelW - Pad * 2 - 130f, y, 124f, 24f,
+                new Color(0.3f, 0.2f, 0.45f, 1f),
+                () =>
+                {
+                    // close config first, then switch
+                    _animTarget = 0f;
+                    RefreshConfigButtonLabel();
+                    OnCommandSubmitted?.Invoke("__switchrenderer");
+                });
+            CfgLabel(content, "Switch renderer to IMGUI",
+                Pad * 2, y + 3f, PanelW - 180f, 20f,
+                new Color(0.82f, 0.85f, 0.92f, 1f));
+            y += 34f;
+
+            CfgDivider(content, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
             y += 14f;
 
-            // ── Stopka ───────────────────────────────────────────────────────────
-            CfgLabel(cfg,
-                "💡  This panel uses UIToolkit opacity + translate animation.\n" +
-                "    These effects are not available in IMGUI. Full config editing coming soon.",
-                Pad, y, PanelW - Pad * 5, 50f,
-                new Color(0.42f, 0.42f, 0.50f, 1f));
+            // ── CONSOLE ─────────────────────────────────────────────────────────
+            CfgSectionLabel(content, "CONSOLE", y);
+            y += 22f;
+
+            CfgToggleRow(content, "Show timestamps in log", "show_timestamps", ref y);
+            CfgToggleRow(content, "Lock game input when open", "lock_input_when_open", ref y);
+
+            // Max log lines — placeholder
+            CfgPlaceholderRow(content, "Max log lines  (2000)", "2000", ref y);
+
+            CfgDivider(content, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
+            y += 14f;
+
+            // ── KEYBINDS ────────────────────────────────────────────────────────
+            CfgSectionLabel(content, "KEYBINDS", y);
+            y += 22f;
+
+            // Default console key — placeholder TODO
+            CfgPlaceholderRow(content, "Toggle console key", "F7", ref y);
+
+            // Lock game input standalone — placeholder TODO (unbound)
+            CfgPlaceholderRow(content, "Lock game input (standalone)", "—", ref y);
+
+            CfgDivider(content, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
+            y += 14f;
+
+            // Restore Defaults
+            MakeButton(content, "Restore Defaults",
+                Pad, y, 130f, 26f,
+                new Color(0.45f, 0.25f, 0.10f, 1f),
+                () =>
+                {
+                    ConsolePlugin.Config?.RestoreDefaults();
+                    RefreshAllConfigToggles();
+                    OnCommandSubmitted?.Invoke("__applyconfig");
+                });
+            y += 40f;
+
+            _configContentH = y;
         }
 
+        // ── Config toggle helpers ─────────────────────────────────────────────────
 
+        private void CfgToggleRow(object parent, string desc, string configKey, ref float y)
+        {
+            bool current = ConsolePlugin.Config?.GetBool(configKey, true) ?? true;
 
+            var btn = MakeButtonWithPtr(parent,
+                current ? "ON" : "OFF",
+                PanelW - Pad * 2 - 130f, y, 124f, 24f,
+                current ? new Color(0.20f, 0.70f, 0.35f, 1f) : new Color(0.50f, 0.15f, 0.15f, 1f),
+                () => ToggleConfigKey(configKey));
 
+            if (!_cfgToggleBtns.ContainsKey(configKey))
+                _cfgToggleBtns[configKey] = Ptr(btn);
 
-        // ── Public API ───────────────────────────────────────────────────────────
+            CfgLabel(parent, desc,
+                Pad * 2, y + 3f, PanelW - 180f, 20f,
+                new Color(0.82f, 0.85f, 0.92f, 1f));
+            y += 34f;
+        }
+
+        private void CfgPlaceholderRow(object parent, string desc, string badgeText, ref float y)
+        {
+            MakeButton(parent, badgeText,
+                PanelW - Pad * 2 - 130f, y, 124f, 24f,
+                new Color(0.28f, 0.28f, 0.33f, 1f),
+                () => { }); // TODO
+
+            CfgLabel(parent, desc,
+                Pad * 2, y + 3f, PanelW - 180f, 20f,
+                new Color(0.55f, 0.58f, 0.65f, 1f));
+            y += 34f;
+        }
+
+        private void ToggleConfigKey(string key)
+        {
+            if (ConsolePlugin.Config == null) return;
+            bool newVal = !ConsolePlugin.Config.GetBool(key, true);
+            ConsolePlugin.Config.SetBool(key, newVal);
+            UpdateToggleBtn(key, newVal);
+            OnCommandSubmitted?.Invoke("__applyconfig");
+        }
+
+        private void UpdateToggleBtn(string key, bool val)
+        {
+            if (!_cfgToggleBtns.TryGetValue(key, out IntPtr ptr) || ptr == IntPtr.Zero) return;
+            var btn = Activator.CreateInstance(_btnType, new object[] { ptr });
+            _btnType.GetProperty("text").SetValue(btn, val ? "ON" : "OFF");
+            var s = Style(btn);
+            SBg(s, val ? new Color(0.20f, 0.70f, 0.35f, 1f) : new Color(0.50f, 0.15f, 0.15f, 1f));
+        }
+
+        private void RefreshAllConfigToggles()
+        {
+            if (ConsolePlugin.Config == null) return;
+            foreach (var kv in _cfgToggleBtns)
+                UpdateToggleBtn(kv.Key, ConsolePlugin.Config.GetBool(kv.Key, true));
+        }
+
+        // ── Public API ────────────────────────────────────────────────────────────
         public void SetVisible(bool visible)
         {
             _visible = visible;
@@ -482,7 +588,6 @@ namespace CMS2026SimpleConsole
         {
             if (!_initialized) return;
 
-            // Zamiast _lineCount używamy liczby dzieci w content
             var content = Wrap(_contentPtr);
             int childCount = (int)_veType.GetProperty("childCount").GetValue(content);
 
@@ -501,7 +606,7 @@ namespace CMS2026SimpleConsole
             if (!_initialized) return;
             var content = Wrap(_contentPtr);
             _veType.GetMethod("Clear").Invoke(content, null);
-            _currentY = 0f;   // BYŁO: _lineCount = 0
+            _currentY = 0f;
             _scrollY = 0f;
         }
 
@@ -509,9 +614,8 @@ namespace CMS2026SimpleConsole
         {
             if (!_initialized || !_visible) return;
             HandleScroll();
-            HandleKeyboard();
             HandleDrag();
-            UpdateConfigAnimation();  
+            UpdateConfigAnimation();
         }
 
         public void OnGUI() { }
@@ -521,97 +625,33 @@ namespace CMS2026SimpleConsole
             if (_go != null) UnityEngine.Object.Destroy(_go);
         }
 
-        public bool TryInit()
+        public void FocusInput()
         {
-            try
-            {
-                // Krok 1 — szukaj assembly
-                var allAsm = AppDomain.CurrentDomain.GetAssemblies();
-                _log($"[UIToolkit] Loaded assemblies: {allAsm.Length}");
-
-                _ueAsm = allAsm.FirstOrDefault(a => a.GetName().Name == "UnityEngine.UIElementsModule");
-                _trAsm = allAsm.FirstOrDefault(a => a.GetName().Name == "UnityEngine.TextRenderingModule");
-
-                if (_ueAsm == null) { _log("[UIToolkit] BRAK: UnityEngine.UIElementsModule"); return false; }
-                if (_trAsm == null) { _log("[UIToolkit] BRAK: UnityEngine.TextRenderingModule"); return false; }
-                _log($"[UIToolkit] ASM OK: {_ueAsm.GetName().Name}, {_trAsm.GetName().Name}");
-
-                // Krok 2 — pobierz typ PanelSettings
-                var psType = _ueAsm.GetType("UnityEngine.UIElements.PanelSettings");
-                if (psType == null) { _log("[UIToolkit] BRAK typu: PanelSettings"); return false; }
-                _log($"[UIToolkit] psType OK: {psType.FullName}");
-
-                // Krok 3 — konwersja na Il2CppType
-                var il2cppPsType = (Il2CppSystem.Type)null;
-                try
-                {
-                    il2cppPsType = Il2CppInterop.Runtime.Il2CppType.From(psType);
-                    _log($"[UIToolkit] Il2CppType OK: {il2cppPsType}");
-                }
-                catch (Exception ex)
-                {
-                    _log($"[UIToolkit] Il2CppType.From failed: {ex.Message}");
-                    return false;
-                }
-
-                // Krok 4 — FindObjectsOfTypeAll
-                var allPS = Resources.FindObjectsOfTypeAll(il2cppPsType);
-                _log($"[UIToolkit] PanelSettings found: {allPS.Length}");
-
-                // Krok 4 — już nie potrzebujemy FindObjectsOfTypeAll
-                // przejdź od razu do init
-                // Krok 5 — reszta init
-                ResolveTypes();
-                ResolveCtors();
-                SetupFont();
-                BuildUI();
-
-                _initialized = true;
-                RebuildAllLines();
-                _log("[UIToolkit] Renderer initialized successfully.");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                var inner = ex.InnerException;
-                while (inner?.InnerException != null) inner = inner.InnerException;
-                _log($"[UIToolkit] Init error: {ex.GetType().Name}: {ex.Message}");
-                if (inner != null && inner != ex)
-                    _log($"[UIToolkit] Inner: {inner.GetType().Name}: {inner.Message}");
-                _log($"[UIToolkit] Stack: {(inner ?? ex).StackTrace?.Split('\n')[0]}");
-                _initFailed = true;
-                return false;
-            }
+            if (_textFieldPtr == IntPtr.Zero) return;
+            var tf = Activator.CreateInstance(_tfType, new object[] { _textFieldPtr });
+            _tfType.GetMethod("Focus")?.Invoke(tf, null);
         }
 
-        // ── Internals ────────────────────────────────────────────────────────────
+        // ── Log internals ─────────────────────────────────────────────────────────
         private void AppendLabel(string text)
         {
-            // Ile pikseli szerokości mamy na tekst
             float usableW = PanelW - Pad * 4;
-
-            // Przybliżona szerokość znaku dla LegacyRuntime.ttf przy domyślnym rozmiarze
-            // ~7.5px — możesz to skalibrować eval-em jeśli trzeba
             const float CharW = 7.5f;
             int charsPerLine = Mathf.Max(1, Mathf.FloorToInt(usableW / CharW));
-
             int linesNeeded = Mathf.Max(1, Mathf.CeilToInt((float)text.Length / charsPerLine));
             float labelH = linesNeeded * LineH;
 
             var lbl = Activator.CreateInstance(_lblType);
             var s = Style(lbl);
             SPosition(s, "Absolute");
-            SLeft(s, Pad);
-            STop(s, _currentY);
-            SWidth(s, usableW);
-            SHeight(s, labelH);
+            SLeft(s, Pad); STop(s, _currentY);
+            SWidth(s, usableW); SHeight(s, labelH);
             SFont(s);
             SColor(s, Color.white);
             _lblType.GetProperty("text").SetValue(lbl, text);
 
             var content = Wrap(_contentPtr);
             AddChild(content, lbl);
-
             _currentY += labelH;
         }
 
@@ -620,42 +660,58 @@ namespace CMS2026SimpleConsole
             ClearLines();
             int start = Mathf.Max(0, _logLines.Count - MaxLabels);
             for (int i = start; i < _logLines.Count; i++)
-                AppendLabel(_logLines[i]);   // bez indeksu
+                AppendLabel(_logLines[i]);
             ScrollToBottom();
         }
 
         private void ScrollToBottom()
         {
             _scrollY = Mathf.Max(0f, _currentY - LogViewH);
-            ApplyScroll();
+            ApplyLogScroll();
         }
 
-        private void ApplyScroll()
+        private void ApplyLogScroll()
         {
             var content = Wrap(_contentPtr);
-            var s = Style(content);
-            STop(s, -_scrollY);
+            STop(Style(content), -_scrollY);
+        }
+
+        private void ApplyConfigScroll()
+        {
+            if (_configContentPtr == IntPtr.Zero) return;
+            var content = Wrap(_configContentPtr);
+            STop(Style(content), -_configScrollY);
         }
 
         private void HandleScroll()
         {
             float delta = Input.mouseScrollDelta.y;
             if (Mathf.Abs(delta) < 0.01f) return;
-            float maxScroll = Mathf.Max(0f, _currentY - LogViewH);
-            _scrollY = Mathf.Clamp(_scrollY - delta * 40f, 0f, maxScroll);
-            ApplyScroll();
-        }
 
-        private void HandleKeyboard()
-        {
+            float mx = Input.mousePosition.x;
+            float muitY = Screen.height - Input.mousePosition.y;
+            float vpTop = _panelY + TitleH + Pad;
+            float vpLeft = _panelX + Pad;
+            float vpRight = vpLeft + PanelW - Pad * 2;
+            float vpBottom = vpTop + LogViewH;
 
+            bool inArea = mx >= vpLeft && mx <= vpRight && muitY >= vpTop && muitY <= vpBottom;
+            if (!inArea) return;
 
-        }
-
-
-        private void RefreshInputLabel()
-        {
-
+            if (_animProgress < 0.5f)
+            {
+                // Log scroll
+                float maxScroll = Mathf.Max(0f, _currentY - LogViewH);
+                _scrollY = Mathf.Clamp(_scrollY - delta * 40f, 0f, maxScroll);
+                ApplyLogScroll();
+            }
+            else
+            {
+                // Config scroll
+                float maxScroll = Mathf.Max(0f, _configContentH - LogViewH);
+                _configScrollY = Mathf.Clamp(_configScrollY - delta * 40f, 0f, maxScroll);
+                ApplyConfigScroll();
+            }
         }
 
         private void HandleDrag()
@@ -676,12 +732,9 @@ namespace CMS2026SimpleConsole
             if (_dragging && Input.GetMouseButton(0))
             {
                 float uitYNow = Screen.height - Input.mousePosition.y;
-                _panelX = Mathf.Clamp(Input.mousePosition.x - _dragOffset.x,
-                    0f, Screen.width - PanelW);
-                _panelY = Mathf.Clamp(uitYNow - _dragOffset.y,
-                    0f, Screen.height - PanelH);
-                var panel = Wrap(_panelPtr);
-                var s = Style(panel);
+                _panelX = Mathf.Clamp(Input.mousePosition.x - _dragOffset.x, 0f, Screen.width - PanelW);
+                _panelY = Mathf.Clamp(uitYNow - _dragOffset.y, 0f, Screen.height - PanelH);
+                var s = Style(Wrap(_panelPtr));
                 SLeft(s, _panelX);
                 STop(s, _panelY);
             }
@@ -695,58 +748,78 @@ namespace CMS2026SimpleConsole
             _sType.GetProperty("display").SetValue(s, _sdCtor.Invoke(new object[] { val }));
         }
 
-        private object MakeButtonWithPtr(object parent,string label, float x, float y, float w, float h,Color bg, Action onClick)
+        // ── Config animation ─────────────────────────────────────────────────────
+        private void ToggleConfig()
         {
-            var btn = Activator.CreateInstance(_btnType);
+            _animTarget = (_animTarget > 0.5f) ? 0f : 1f;
+            RefreshConfigButtonLabel();
+        }
+
+        private void RefreshConfigButtonLabel()
+        {
+            if (_configBtnPtr == IntPtr.Zero) return;
+            bool showingConfig = _animTarget > 0.5f;
+            var btn = Activator.CreateInstance(_btnType, new object[] { _configBtnPtr });
+            _btnType.GetProperty("text").SetValue(btn, showingConfig ? "✕  Close" : "⚙  Config");
             var s = Style(btn);
-            SPosition(s, "Absolute");
-            SLeft(s, x); STop(s, y);
-            SWidth(s, w); SHeight(s, h);
-            SBg(s, bg);
-            SColor(s, Color.white);
-            SFont(s);
-            // ── centrowanie tekstu ──────────────────────────────────────────────────
-
-            _sType.GetProperty("unityTextAlign").SetValue(s,_staCtor.Invoke(new object[] { UnityEngine.TextAnchor.MiddleCenter }));
-
-            // Padding zero 
-            _sType.GetProperty("paddingLeft").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
-            _sType.GetProperty("paddingRight").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
-            _sType.GetProperty("paddingTop").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
-            _sType.GetProperty("paddingBottom").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
-
-            _btnType.GetProperty("text").SetValue(btn, label);
-
-            var clickable = _btnType.GetProperty("clickable").GetValue(btn);
-            var il2cppAction = Il2CppInterop.Runtime.DelegateSupport
-                .ConvertDelegate<Il2CppSystem.Action>(onClick);
-            _clickableType.GetMethod("add_clicked").Invoke(clickable, new object[] { il2cppAction });
-
-            AddChild(parent, btn);
-            return btn;
+            SBg(s, showingConfig
+                ? new Color(0.45f, 0.12f, 0.12f, 1f)
+                : new Color(0.15f, 0.38f, 0.28f, 1f));
         }
 
-        public void FocusInput()
+        private void UpdateConfigAnimation()
         {
-            if (_textFieldPtr == IntPtr.Zero) return;
-            var tf = Activator.CreateInstance(_tfType, new object[] { _textFieldPtr });
-            _tfType.GetMethod("Focus")?.Invoke(tf, null);
+            if (Mathf.Abs(_animProgress - _animTarget) < 0.001f) return;
+
+            _animProgress = Mathf.MoveTowards(
+                _animProgress, _animTarget, AnimSpeed * Time.deltaTime);
+
+            float t = SmoothStep(_animProgress);
+
+            // Log viewport
+            if (_logViewportPtr != IntPtr.Zero)
+            {
+                if (_animProgress >= 0.99f)
+                {
+                    ApplyDisplay(_logViewportPtr, false);
+                }
+                else
+                {
+                    ApplyDisplay(_logViewportPtr, true);
+                    var lv = Wrap(_logViewportPtr);
+                    var ls = Style(lv);
+                    SOpacity(ls, 1f - t);
+                    STop(ls, (TitleH + Pad) - t * 22f);
+                }
+            }
+
+            // Config panel
+            if (_configPanelPtr != IntPtr.Zero)
+            {
+                if (_animProgress <= 0.01f)
+                {
+                    ApplyDisplay(_configPanelPtr, false);
+                    _configScrollY = 0f; // reset scroll when closing
+                    ApplyConfigScroll();
+                }
+                else
+                {
+                    ApplyDisplay(_configPanelPtr, true);
+                    // Refresh toggles when opening
+                    if (_animProgress > 0f && _animTarget > 0.5f)
+                        RefreshAllConfigToggles();
+
+                    var cv = Wrap(_configPanelPtr);
+                    var cvs = Style(cv);
+                    SOpacity(cvs, t);
+                    STop(cvs, (TitleH + Pad) + (1f - t) * 22f);
+                }
+            }
         }
 
-        private void UpdateLockButtonLabel()
-        {
-            if (_lockBtnPtr == IntPtr.Zero) return;
-            var btn = Activator.CreateInstance(_btnType, new object[] { _lockBtnPtr });
-            _btnType.GetProperty("text").SetValue(btn,
-                _inputLocked ? "Unlock Input" : "Lock Input");
-            var s = Style(btn);
-            SBg(s, _inputLocked
-                ? new Color(0.7f, 0.15f, 0.15f, 1f)
-                : new Color(0.15f, 0.45f, 0.15f, 1f));
-        }
+        private static float SmoothStep(float t) => t * t * (3f - 2f * t);
 
-        // Helpers do budowania configu ─────────────────────────────────────────────
-
+        // ── Config UI helpers ─────────────────────────────────────────────────────
         private void CfgLabel(object parent, string text,
             float x, float y, float w, float h, Color col, int fontSize = 11)
         {
@@ -779,100 +852,65 @@ namespace CMS2026SimpleConsole
             AddChild(parent, div);
         }
 
-        private void CfgRow(object parent, string desc, string badgeText, Color badgeColor, ref float y)
+        // ── Button helpers ────────────────────────────────────────────────────────
+        private void MakeButton(object parent, string label,
+            float x, float y, float w, float h, Color bg, Action onClick)
+            => MakeButtonWithPtr(parent, label, x, y, w, h, bg, onClick);
+
+        private object MakeButtonWithPtr(object parent, string label,
+            float x, float y, float w, float h, Color bg, Action onClick)
         {
-            // Podświetlenie paska przy hoverze nie jest tutaj zrobione — placeholder
-            CfgLabel(parent, desc,
-                Pad * 2, y + 3f, PanelW - 180f, 20f,
-                new Color(0.82f, 0.85f, 0.92f, 1f));
-
-            MakeButton(parent, badgeText,
-                PanelW - Pad * 2 - 130f, y, 124f, 24f,
-                badgeColor,
-                () => { }); // TODO: podpięcie akcji
-
-            y += 34f;
-        }
-
-        // ── Przełącznik paneli ────────────────────────────────────────────────────
-
-        private void ToggleConfig()
-        {
-            _animTarget = (_animTarget > 0.5f) ? 0f : 1f;
-            RefreshConfigButtonLabel();
-        }
-
-        private void RefreshConfigButtonLabel()
-        {
-            if (_configBtnPtr == IntPtr.Zero) return;
-            bool showingConfig = _animTarget > 0.5f;
-            var btn = Activator.CreateInstance(_btnType, new object[] { _configBtnPtr });
-            _btnType.GetProperty("text").SetValue(btn, showingConfig ? "✕  Close" : "🔧  Config");
+            var btn = Activator.CreateInstance(_btnType);
             var s = Style(btn);
-            SBg(s, showingConfig
-                ? new Color(0.45f, 0.12f, 0.12f, 1f)
-                : new Color(0.15f, 0.38f, 0.28f, 1f));
+            SPosition(s, "Absolute");
+            SLeft(s, x); STop(s, y);
+            SWidth(s, w); SHeight(s, h);
+            SBg(s, bg);
+            SColor(s, Color.white);
+            SFont(s);
+
+            _sType.GetProperty("unityTextAlign").SetValue(s,
+                _staCtor.Invoke(new object[] { UnityEngine.TextAnchor.MiddleCenter }));
+            _sType.GetProperty("paddingLeft").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
+            _sType.GetProperty("paddingRight").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
+            _sType.GetProperty("paddingTop").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
+            _sType.GetProperty("paddingBottom").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
+
+            _btnType.GetProperty("text").SetValue(btn, label);
+
+            var clickable = _btnType.GetProperty("clickable").GetValue(btn);
+            var il2cppAction = Il2CppInterop.Runtime.DelegateSupport
+                .ConvertDelegate<Il2CppSystem.Action>(onClick);
+            _clickableType.GetMethod("add_clicked").Invoke(clickable, new object[] { il2cppAction });
+
+            AddChild(parent, btn);
+            return btn;
         }
 
-        // ── Animacja ─────────────────────────────────────────────────────────────
-
-        private void UpdateConfigAnimation()
+        private void MakeButtonLink(object parent, string label,
+            float x, float y, float w, float h, Action onClick)
         {
-            if (Mathf.Abs(_animProgress - _animTarget) < 0.001f) return;
-
-            _animProgress = Mathf.MoveTowards(
-                _animProgress, _animTarget, AnimSpeed * Time.deltaTime);
-
-            float t = SmoothStep(_animProgress);
-
-            // Log viewport: zanika w górę
-            if (_logViewportPtr != IntPtr.Zero)
-            {
-                if (_animProgress >= 0.99f)
-                {
-                    // W pełni ukryty — wyłącz żeby nie blokował zdarzeń
-                    ApplyDisplay(_logViewportPtr, false);
-                }
-                else
-                {
-                    ApplyDisplay(_logViewportPtr, true);
-                    var lv = Wrap(_logViewportPtr);
-                    var ls = Style(lv);
-                    SOpacity(ls, 1f - t);
-                    STop(ls, (TitleH + Pad) - t * 22f);
-                }
-            }
-
-            // Config panel: pojawia się z dołu
-            if (_configPanelPtr != IntPtr.Zero)
-            {
-                if (_animProgress <= 0.01f)
-                {
-                    ApplyDisplay(_configPanelPtr, false);
-                }
-                else
-                {
-                    ApplyDisplay(_configPanelPtr, true);
-                    var cv = Wrap(_configPanelPtr);
-                    var cs = Style(cv);
-                    SOpacity(cs, t);
-                    STop(cs, (TitleH + Pad) + (1f - t) * 22f);
-                }
-            }
+            var btn = MakeButtonWithPtr(parent, label, x, y, w, h, new Color(0f, 0f, 0f, 0f), onClick);
+            SColor(Style(btn), new Color(0.4f, 0.7f, 1f, 1f));
         }
 
-        // Smoothstep — przyjemniejszy niż linear
-        private static float SmoothStep(float t) => t * t * (3f - 2f * t);
+        private void UpdateLockButtonLabel()
+        {
+            if (_lockBtnPtr == IntPtr.Zero) return;
+            var btn = Activator.CreateInstance(_btnType, new object[] { _lockBtnPtr });
+            _btnType.GetProperty("text").SetValue(btn,
+                _inputLocked ? "Unlock Input" : "Lock Input");
+            var s = Style(btn);
+            SBg(s, _inputLocked
+                ? new Color(0.7f, 0.15f, 0.15f, 1f)
+                : new Color(0.15f, 0.45f, 0.15f, 1f));
+        }
 
-
-        // ── Reflection micro-helpers ─────────────────────────────────────────────
+        // ── Reflection micro-helpers ──────────────────────────────────────────────
         private object VE() => Activator.CreateInstance(_veType);
-        private object Wrap(IntPtr p) =>
-            Activator.CreateInstance(_veType, new object[] { p });
-        private object Style(object ve) =>
-            _veType.GetProperty("style").GetValue(ve);
-        private IntPtr Ptr(object ve) =>
-            ((Il2CppSystem.Object)ve).Pointer;
+        private object Wrap(IntPtr p) => Activator.CreateInstance(_veType, new object[] { p });
+        private object Style(object ve) => _veType.GetProperty("style").GetValue(ve);
+        private IntPtr Ptr(object ve) => ((Il2CppSystem.Object)ve).Pointer;
         private void AddChild(object parent, object child) =>
             _veType.GetMethod("Add", new Type[] { _veType })
                    .Invoke(parent, new object[] { child });
@@ -883,25 +921,13 @@ namespace CMS2026SimpleConsole
         private void SOverflow(object s, string v) =>
             _sType.GetProperty("overflow").SetValue(s,
                 _soCtor.Invoke(new object[] { Enum.Parse(_ofType, v) }));
-        private void SLeft(object s, float v) =>
-            _sType.GetProperty("left").SetValue(s, _slCtor.Invoke(new object[] { v }));
-        private void STop(object s, float v) =>
-            _sType.GetProperty("top").SetValue(s, _slCtor.Invoke(new object[] { v }));
-        private void SWidth(object s, float v) =>
-            _sType.GetProperty("width").SetValue(s, _slCtor.Invoke(new object[] { v }));
-        private void SHeight(object s, float v) =>
-            _sType.GetProperty("height").SetValue(s, _slCtor.Invoke(new object[] { v }));
-        private void SBg(object s, Color c) =>
-            _sType.GetProperty("backgroundColor").SetValue(s,
-                _scCtor.Invoke(new object[] { c }));
-        private void SColor(object s, Color c) =>
-            _sType.GetProperty("color").SetValue(s,
-                _scCtor.Invoke(new object[] { c }));
-        private void SFont(object s) =>
-            _sType.GetProperty("unityFontDefinition").SetValue(s,
-                _sfdCtor.Invoke(new object[] { _fontDef }));
-
-        private void SOpacity(object s, float v) =>
-    _sType.GetProperty("opacity").SetValue(s, _sfCtor.Invoke(new object[] { v }));
+        private void SLeft(object s, float v) => _sType.GetProperty("left").SetValue(s, _slCtor.Invoke(new object[] { v }));
+        private void STop(object s, float v) => _sType.GetProperty("top").SetValue(s, _slCtor.Invoke(new object[] { v }));
+        private void SWidth(object s, float v) => _sType.GetProperty("width").SetValue(s, _slCtor.Invoke(new object[] { v }));
+        private void SHeight(object s, float v) => _sType.GetProperty("height").SetValue(s, _slCtor.Invoke(new object[] { v }));
+        private void SBg(object s, Color c) => _sType.GetProperty("backgroundColor").SetValue(s, _scCtor.Invoke(new object[] { c }));
+        private void SColor(object s, Color c) => _sType.GetProperty("color").SetValue(s, _scCtor.Invoke(new object[] { c }));
+        private void SFont(object s) => _sType.GetProperty("unityFontDefinition").SetValue(s, _sfdCtor.Invoke(new object[] { _fontDef }));
+        private void SOpacity(object s, float v) => _sType.GetProperty("opacity").SetValue(s, _sfCtor.Invoke(new object[] { v }));
     }
 }

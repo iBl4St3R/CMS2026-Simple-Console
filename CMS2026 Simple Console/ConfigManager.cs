@@ -10,10 +10,12 @@ namespace CMS2026SimpleConsole
         private readonly Dictionary<string, string> _values = new();
         private readonly Action<string> _log;
 
-        // ── Domyślne wartości ────────────────────────────────────────────────────
         private static readonly Dictionary<string, string> Defaults = new()
         {
-            { "autolock", "false" },
+            { "uitoolkit_priority",    "true"  },
+            { "show_timestamps",       "true"  },
+            { "lock_input_when_open",  "true"  },
+            { "max_log_lines",         "2000"  },
         };
 
         public ConfigManager(string modDir, Action<string> log)
@@ -21,13 +23,16 @@ namespace CMS2026SimpleConsole
             _log = log;
             string dir = Path.Combine(modDir, "CMS2026SimpleConsole");
             Directory.CreateDirectory(dir);
-            _path = Path.Combine(dir, "config.txt");
+            _path = Path.Combine(dir, "CMS2026SimpleConsole.cfg");
 
             LoadDefaults();
             Load();
         }
 
-        // ── Odczyt ──────────────────────────────────────────────────────────────
+        public string ConfigFilePath => _path;
+        public string ConfigFolderPath => Path.GetDirectoryName(_path);
+
+        // ── Read ─────────────────────────────────────────────────────────────────
         public bool GetBool(string key, bool fallback = false)
         {
             if (_values.TryGetValue(key.ToLower(), out string v))
@@ -40,7 +45,7 @@ namespace CMS2026SimpleConsole
             return _values.TryGetValue(key.ToLower(), out string v) ? v : fallback;
         }
 
-        // ── Zapis ────────────────────────────────────────────────────────────────
+        // ── Write ────────────────────────────────────────────────────────────────
         public void Set(string key, string value)
         {
             _values[key.ToLower()] = value.Trim();
@@ -48,6 +53,13 @@ namespace CMS2026SimpleConsole
         }
 
         public void SetBool(string key, bool value) => Set(key, value ? "true" : "false");
+
+        public void RestoreDefaults()
+        {
+            LoadDefaults();
+            Save();
+            _log("[Config] Defaults restored.");
+        }
 
         // ── I/O ──────────────────────────────────────────────────────────────────
         private void LoadDefaults()
@@ -60,7 +72,7 @@ namespace CMS2026SimpleConsole
         {
             if (!File.Exists(_path))
             {
-                Save(); // utwórz plik z domyślnymi
+                Save();
                 _log($"[Config] New config created: {_path}");
                 return;
             }
@@ -84,10 +96,11 @@ namespace CMS2026SimpleConsole
 
         private void Save()
         {
-            var lines = new List<string>
+            var lines = new System.Collections.Generic.List<string>
             {
-                "# CMS2026 Simple Console - config",
-                "# Edit manually or use the command: setconfig <key> <value>",
+                "# CMS2026 Simple Console - configuration file",
+                "# Edit manually or use the in-game config panel.",
+                "# Boolean values: true / false",
                 ""
             };
 
@@ -99,7 +112,7 @@ namespace CMS2026SimpleConsole
 
         public void PrintAll(Action<string> print)
         {
-            print("[Config] settings:");
+            print("[Config] Current settings:");
             foreach (var kv in _values)
                 print($"  {kv.Key} = {kv.Value}");
         }

@@ -16,8 +16,11 @@ namespace CMS2026SimpleConsole
 {
     public class ConsolePlugin : MelonMod
     {
+        public const string Version = "1.0.3";
+
         public static string ModDir { get; private set; }
         public static MelonLogger.Instance Log => Melon<ConsolePlugin>.Logger;
+        public static ConfigManager Config { get; set; }
 
         private static string _userLibsDir;
         private static GameObject _consoleHost;
@@ -29,7 +32,6 @@ namespace CMS2026SimpleConsole
             ModDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             _userLibsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserLibs");
 
-            // Hookujemy ALC w którym działa ten mod — nie domyślny AppDomain
             var modAlc = AssemblyLoadContext.GetLoadContext(typeof(ConsolePlugin).Assembly);
             if (modAlc != null)
             {
@@ -37,27 +39,23 @@ namespace CMS2026SimpleConsole
                 Log.Msg($"[Resolver] Registered on ALC: {modAlc.Name ?? "unnamed"}");
             }
 
-            // Fallback na domyślny ALC — na wszelki wypadek
             AppDomain.CurrentDomain.AssemblyResolve += OnAssemblyResolve;
 
             ClassInjector.RegisterTypeInIl2Cpp<CMS2026SimpleConsoleComponent>();
-            Log.Msg("CMS2026 Simple Console loaded.!");
+            Log.Msg("CMS2026 Simple Console loaded!");
         }
 
-        // .NET 6 ALC resolver
         private static Assembly OnAlcResolving(AssemblyLoadContext alc, AssemblyName assemblyName)
         {
             string path = Path.Combine(_userLibsDir, assemblyName.Name + ".dll");
             if (File.Exists(path))
             {
                 Log.Msg($"[Resolver ALC] {assemblyName.Name}");
-                // LoadFromStream zamiast Load(bytes) — działa wewnątrz danego ALC
                 return alc.LoadFromStream(new MemoryStream(File.ReadAllBytes(path)));
             }
             return null;
         }
 
-        // Fallback dla domyślnego ALC
         private static Assembly OnAssemblyResolve(object sender, ResolveEventArgs args)
         {
             string name = new AssemblyName(args.Name).Name;

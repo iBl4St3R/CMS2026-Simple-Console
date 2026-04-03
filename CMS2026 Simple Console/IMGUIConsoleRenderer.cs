@@ -14,8 +14,6 @@ namespace CMS2026SimpleConsole
         private string _commandInput = "";
         private const int WindowId = 9871;
 
-
-
         public bool IsVisible => _visible;
         public string CommandInput { get => _commandInput; set => _commandInput = value; }
         public event Action<string> OnCommandSubmitted;
@@ -46,10 +44,7 @@ namespace CMS2026SimpleConsole
             GUI.backgroundColor = orig;
         }
 
-        public void FocusInput()
-        {
-
-        }
+        public void FocusInput() { }
 
         private void DrawWindow(int id)
         {
@@ -81,24 +76,36 @@ namespace CMS2026SimpleConsole
                 OnCommandSubmitted?.Invoke(cmd);
             }
 
-            float btnY = _windowRect.height - 35;
+            // ── Button row ────────────────────────────────────────────────────────
+            float btnY = _windowRect.height - 35f;
+            float x = 10f;
 
-            if (GUI.Button(new Rect(10, btnY, 80, 25), "Clear"))
+            if (GUI.Button(new Rect(x, btnY, 68f, 25f), "Clear"))
                 OnCommandSubmitted?.Invoke("__clear");
+            x += 72f;
 
-            if (GUI.Button(new Rect(100, btnY, 80, 25), "Help"))
+            if (GUI.Button(new Rect(x, btnY, 68f, 25f), "Help"))
                 OnCommandSubmitted?.Invoke("help");
+            x += 72f;
 
-            if (GUI.Button(new Rect(190, btnY, 100, 25), "Copy log"))
+            if (GUI.Button(new Rect(x, btnY, 82f, 25f), "Copy log"))
                 OnCommandSubmitted?.Invoke("__copylog");
+            x += 86f;
 
-            if (GUI.Button(new Rect(300, btnY, 100, 25), "→ UIToolkit"))
+            // Config — opens the mod folder and selects the cfg file
+            if (GUI.Button(new Rect(x, btnY, 64f, 25f), "Config"))
+                OnCommandSubmitted?.Invoke("__openconfig");
+            x += 68f;
+
+            if (GUI.Button(new Rect(x, btnY, 95f, 25f), "→ UIToolkit"))
                 OnCommandSubmitted?.Invoke("__switchrenderer");
 
-
+            // ── Version + author label ────────────────────────────────────────────
+            string sigText = $"SC {ConsolePlugin.Version} by Blaster";
             var sigStyle = new GUIStyle(GUI.skin.label);
-            sigStyle.normal.textColor = new Color(0.9f, 0.9f, 0.9f, 1f);
-            GUI.Label(new Rect(_windowRect.width - 80, btnY, 110, 25), "by Blaster", sigStyle);
+            sigStyle.normal.textColor = new Color(0.55f, 0.75f, 1f, 1f);
+            sigStyle.alignment = TextAnchor.MiddleRight;
+            GUI.Label(new Rect(_windowRect.width - 170f, btnY, 160f, 25f), sigText, sigStyle);
 
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
