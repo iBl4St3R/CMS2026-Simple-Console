@@ -35,10 +35,10 @@ namespace CMS2026SimpleConsole
         private object _fontDef;
 
         // ── Layout ──────────────────────────────────────────────────────────────
-        private const float PanelW = 660f;
-        private const float PanelH = 500f;
+        private float PanelW => ConsolePlugin.Config != null && float.TryParse(ConsolePlugin.Config.GetString("panel_width", "660"), out float _pw) ? Mathf.Clamp(_pw, 560f, 1400f) : 660f;
+        private float PanelH => ConsolePlugin.Config != null&& float.TryParse(ConsolePlugin.Config.GetString("panel_height", "500"), out float _ph)? Mathf.Clamp(_ph, 300f, 1000f) : 500f;
         private const float TitleH = 24f;
-        private const float LogViewH = 360f;
+        private float LogViewH => PanelH - TitleH - InputH - BtnBarH - Pad * 5f;
         private const float InputH = 28f;
         private const float BtnBarH = 26f;
         private const float LineH = 22f;
@@ -54,6 +54,9 @@ namespace CMS2026SimpleConsole
         private IntPtr _textFieldPtr;
         private GameObject _go;
         private IntPtr _psPtr;
+        private IntPtr _rootPtr;        
+        private IntPtr _panelWidthValuePtr = IntPtr.Zero;   
+        private IntPtr _panelHeightValuePtr = IntPtr.Zero; 
 
         // ── Log scroll ──────────────────────────────────────────────────────────
         private float _scrollY;
@@ -72,6 +75,10 @@ namespace CMS2026SimpleConsole
 
         private readonly Dictionary<string, IntPtr> _keybindLabelPtrs = new Dictionary<string, IntPtr>();
         private IntPtr _maxLogValuePtr = IntPtr.Zero;
+        private float _pendingPanelWidth = 0f;   
+        private float _pendingHeight = 0f;   
+        private IntPtr _pendingWidthLabelPtr = IntPtr.Zero;  
+        private IntPtr _pendingHeightLabelPtr = IntPtr.Zero;  
 
         // ── Animation ────────────────────────────────────────────────────────────
         private float _animProgress = 0f;
@@ -241,6 +248,7 @@ namespace CMS2026SimpleConsole
 
         private void BuildPanel(object root)
         {
+            _rootPtr = Ptr(root);
             var panel = VE();
             var s = Style(panel);
             SPosition(s, "Absolute");
@@ -486,9 +494,14 @@ namespace CMS2026SimpleConsole
 
             CfgToggleRow(content, "Show timestamps in log", "show_timestamps", ref y);
             CfgToggleRow(content, "Lock game input when open", "lock_input_when_open", ref y);
+            CfgToggleRow(content, "Show console at startup", "show_at_startup", ref y);
 
             // Max log lines — placeholder
             CfgMaxLogRow(content, ref y);
+
+            // Panel size (UIToolkit only)
+            CfgPanelSizeRow(content, "Panel width", "panel_width", 560f, 1400f, ref y);
+            CfgPanelSizeRow(content, "Panel height", "panel_height", 300f, 1000f, ref y);
 
             CfgDivider(content, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
             y += 14f;
@@ -603,6 +616,99 @@ namespace CMS2026SimpleConsole
             y += 34f;
         }
 
+
+        //C# nie pozwala na ref do właściwości warunkowej w lambdzie w ten sposób
+        //private void CfgPanelSizeRow(object parent, string label,
+        //    string configKey, float min, float max, ref float y)
+        //{
+        //    string cur = ConsolePlugin.Config?.GetString(configKey,
+        //        configKey == "panel_width" ? "660" : "500") ?? "660";
+
+        //    var lbl = MakeButtonWithPtr(parent, cur,
+        //        PanelW - Pad * 2 - 130f, y, 62f, 24f,
+        //        new Color(0.10f, 0.10f, 0.16f, 1f),
+        //        () => { });
+
+        //    if (configKey == "panel_width") _panelWidthValuePtr = Ptr(lbl);
+        //    else _panelHeightValuePtr = Ptr(lbl);
+
+        //    MakeButton(parent, "−",
+        //        PanelW - Pad * 2 - 64f, y, 28f, 24f,
+        //        new Color(0.38f, 0.18f, 0.18f, 1f),
+        //        () =>
+        //        {
+        //            StepPanelSize(configKey, -50f, min, max,
+        //                ref configKey == "panel_width"
+        //                    ? ref _panelWidthValuePtr
+        //                    : ref _panelHeightValuePtr);
+        //        });
+
+        //    MakeButton(parent, "+",
+        //        PanelW - Pad * 2 - 32f, y, 28f, 24f,
+        //        new Color(0.18f, 0.38f, 0.18f, 1f),
+        //        () =>
+        //        {
+        //            StepPanelSize(configKey, +50f, min, max,
+        //                ref configKey == "panel_width"
+        //                    ? ref _panelWidthValuePtr
+        //                    : ref _panelHeightValuePtr);
+        //        });
+
+        //    CfgLabel(parent, label,
+        //        Pad * 2, y + 3f, PanelW - 180f, 20f,
+        //        new Color(0.82f, 0.85f, 0.92f, 1f));
+        //    y += 34f;
+        //}
+
+        //workaround
+        private void CfgPanelSizeRow(object parent, string label,
+           string configKey, float min, float max, ref float y)
+        {
+            float def = configKey == "panel_width" ? 660f : 500f;
+            float cur = float.TryParse(
+                ConsolePlugin.Config?.GetString(configKey, def.ToString()),
+                out float cv) ? Mathf.Clamp(cv, min, max) : def;  // <-- clamp z pliku cfg
+
+            if (configKey == "panel_width") _pendingPanelWidth = cur;
+            else _pendingHeight = cur;
+
+            var lbl = MakeButtonWithPtr(parent, ((int)cur).ToString(),
+                PanelW - Pad * 2 - 130f, y, 62f, 24f,
+                new Color(0.10f, 0.10f, 0.16f, 1f),
+                () => { });
+
+            if (configKey == "panel_width") _pendingWidthLabelPtr = Ptr(lbl);
+            else _pendingHeightLabelPtr = Ptr(lbl);
+
+            MakeButton(parent, "−",
+                PanelW - Pad * 2 - 64f, y, 28f, 24f,
+                new Color(0.38f, 0.18f, 0.18f, 1f),
+                () => StepPanelSize(configKey, -50f, min, max));
+
+            MakeButton(parent, "+",
+                PanelW - Pad * 2 - 32f, y, 28f, 24f,
+                new Color(0.18f, 0.38f, 0.18f, 1f),
+                () => StepPanelSize(configKey, +50f, min, max));
+
+            // Set button — dopiero tu zapisuje i przebudowuje
+            MakeButton(parent, "Set",
+                PanelW - Pad * 2 - 130f, y + 28f, 94f, 22f,
+                new Color(0.20f, 0.45f, 0.20f, 1f),
+                () =>
+                {
+                    float pending = configKey == "panel_width" ? _pendingPanelWidth : _pendingHeight;
+                    ConsolePlugin.Config?.Set(configKey, ((int)pending).ToString());
+                    RebuildForResize();
+                });
+
+            CfgLabel(parent, label,
+                Pad * 2, y + 3f, PanelW - 180f, 20f,
+                new Color(0.82f, 0.85f, 0.92f, 1f));
+            y += 56f; // więcej miejsca bo Set jest pod spodem
+        }
+
+
+
         private void StepMaxLogLines(int delta)
         {
             if (ConsolePlugin.Config == null) return;
@@ -616,6 +722,45 @@ namespace CMS2026SimpleConsole
                 _btnType.GetProperty("text").SetValue(b, next.ToString());
             }
             OnCommandSubmitted?.Invoke("__applyconfig");
+        }
+
+
+        //c# nie pozwala na ref do właściwości warunkowej w lambdzi
+        //private void StepPanelSize(string key, float delta, float min, float max,
+        //                           ref IntPtr labelPtr)
+        //{
+        //    if (ConsolePlugin.Config == null) return;
+        //    float cur = float.TryParse(
+        //        ConsolePlugin.Config.GetString(key, key == "panel_width" ? "660" : "500"),
+        //        out float v) ? v : (key == "panel_width" ? 660f : 500f);
+        //    float next = Mathf.Clamp(cur + delta, min, max);
+        //    ConsolePlugin.Config.Set(key, ((int)next).ToString());
+        //    RebuildForResize();
+        //}
+
+        //workaround
+        private void StepPanelSize(string key, float delta, float min, float max)
+        {
+            if (ConsolePlugin.Config == null) return;
+
+            if (key == "panel_width")
+            {
+                _pendingPanelWidth = Mathf.Clamp(_pendingPanelWidth + delta, min, max);
+                if (_pendingWidthLabelPtr != IntPtr.Zero)
+                {
+                    var b = Activator.CreateInstance(_btnType, new object[] { _pendingWidthLabelPtr });
+                    _btnType.GetProperty("text").SetValue(b, ((int)_pendingPanelWidth).ToString());
+                }
+            }
+            else
+            {
+                _pendingHeight = Mathf.Clamp(_pendingHeight + delta, min, max);
+                if (_pendingHeightLabelPtr != IntPtr.Zero)
+                {
+                    var b = Activator.CreateInstance(_btnType, new object[] { _pendingHeightLabelPtr });
+                    _btnType.GetProperty("text").SetValue(b, ((int)_pendingHeight).ToString());
+                }
+            }
         }
 
         public void RefreshKeybindLabels()
@@ -753,6 +898,36 @@ namespace CMS2026SimpleConsole
             for (int i = start; i < _logLines.Count; i++)
                 AppendLabel(_logLines[i]);
             ScrollToBottom();
+        }
+
+        private void RebuildForResize()
+        {
+            if (_rootPtr == IntPtr.Zero) return;
+            var root = Activator.CreateInstance(_veType, new object[] { _rootPtr });
+            if (_panelPtr != IntPtr.Zero)
+            {
+                var oldPanel = Activator.CreateInstance(_veType, new object[] { _panelPtr });
+                _veType.GetMethod("Remove", new Type[] { _veType })?.Invoke(root, new object[] { oldPanel });
+            }
+            _currentY = 0f; _scrollY = 0f; _configScrollY = 0f;
+            _animProgress = 0f; _animTarget = 0f;
+            _cfgToggleBtns.Clear();
+            _keybindLabelPtrs.Clear();
+            _maxLogValuePtr = IntPtr.Zero;
+
+            _pendingWidthLabelPtr = IntPtr.Zero;   
+            _pendingHeightLabelPtr = IntPtr.Zero;   
+
+            _panelWidthValuePtr = IntPtr.Zero;
+            _panelHeightValuePtr = IntPtr.Zero;
+            _configBtnPtr = IntPtr.Zero;
+            _lockBtnPtr = IntPtr.Zero;
+            _logViewportPtr = IntPtr.Zero;
+            _configPanelPtr = IntPtr.Zero;
+            _configContentPtr = IntPtr.Zero;
+            _textFieldPtr = IntPtr.Zero;
+            BuildPanel(root);
+            RebuildAllLines();
         }
 
         private void ScrollToBottom()

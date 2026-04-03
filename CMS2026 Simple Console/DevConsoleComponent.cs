@@ -78,6 +78,10 @@ namespace CMS2026SimpleConsole
                 AddLog("[REPL] INIT ERROR: " + ex.GetType().Name);
                 AddLog("[REPL] " + ex.Message);
             }
+
+            // Ukryj konsolę na starcie jeśli opcja wyłączona
+            if (!(_config?.GetBool("show_at_startup", true) ?? true))
+                _renderer.SetVisible(false);
         }
 
         private void InitRenderer()
@@ -319,8 +323,11 @@ namespace CMS2026SimpleConsole
             }
         }
 
+
+        [HideFromIl2Cpp]
         private void StartKeyBinding(string configKey, bool allowDisable, Action onComplete = null)
         {
+
             _bindingConfigKey = configKey;
             _bindingAllowDisable = allowDisable;
             _bindingOnComplete = onComplete;

@@ -15,9 +15,12 @@ namespace CMS2026SimpleConsole
             { "uitoolkit_priority",    "true"  },
             { "show_timestamps",       "true"  },
             { "lock_input_when_open",  "true"  },
+            { "show_at_startup",       "true"  },
             { "max_log_lines",         "2000"  },
-            { "toggle_console_key",    "F7"    },   
-            { "standalone_lock_key",   "None"  }, 
+            { "toggle_console_key",    "F7"    },
+            { "standalone_lock_key",   "None"  },
+            { "panel_width",           "660"   },
+            { "panel_height",          "500"   },
         };
 
         public ConfigManager(string modDir, Action<string> log)
