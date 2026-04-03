@@ -394,9 +394,7 @@ namespace CMS2026SimpleConsole
         }
 
 
-        private void MakeButton(object parent,
-    string label, float x, float y, float w, float h,
-    Color bg, Action onClick)
+        private void MakeButton(object parent,string label, float x, float y, float w, float h,Color bg, Action onClick)
         {
             MakeButtonWithPtr(parent, label, x, y, w, h, bg, onClick);
         }
