@@ -93,6 +93,19 @@ namespace CMS2026SimpleConsole
 
         private IntPtr _psPtr;
 
+        // ── Config animation ─────────────────────────────────────────────────────
+        private float _animProgress = 0f;   // 0 = log visible, 1 = config visible
+        private float _animTarget = 0f;
+        private const float AnimSpeed = 5f; // jednostki/sekunda (0→1)
+
+        private IntPtr _logViewportPtr;     // outer viewport (save w BuildLogArea)
+        private IntPtr _configPanelPtr;
+        private IntPtr _configBtnPtr;
+
+        // StyleFloat (opacity) ────────────────────────────────────────────────────
+        private Type _sfType;
+        private ConstructorInfo _sfCtor;
+
         public bool InitFailed => _initFailed;
 
         // ── Interface ────────────────────────────────────────────────────────────
@@ -160,8 +173,9 @@ namespace CMS2026SimpleConsole
 
             // FIX: TextAnchor dla unityTextAlign
             _taType = typeof(UnityEngine.TextAnchor);   // z Il2Cpp interop
-            _staType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1")
-                             .MakeGenericType(_taType);
+            _staType = _ueAsm.GetType("UnityEngine.UIElements.StyleEnum`1").MakeGenericType(_taType);
+
+            _sfType = _ueAsm.GetType("UnityEngine.UIElements.StyleFloat");
         }
 
         private void ResolveCtors()
@@ -176,8 +190,9 @@ namespace CMS2026SimpleConsole
             _saCtor = _saType.GetConstructor(new Type[] { _alignType });
             _sjCtor = _sjType.GetConstructor(new Type[] { _justifyType });
 
-            // FIX
+            
             _staCtor = _staType.GetConstructor(new Type[] { _taType });
+            _sfCtor = _sfType.GetConstructor(new[] { typeof(float) });
         }
 
         // ── Font ─────────────────────────────────────────────────────────────────
@@ -238,6 +253,9 @@ namespace CMS2026SimpleConsole
 
             BuildTitleBar(panel);
             BuildLogArea(panel);
+
+            BuildConfigPanel(panel);  
+
             BuildInputRow(panel);
             BuildButtonRow(panel);
             BuildSignature(panel);
@@ -282,6 +300,8 @@ namespace CMS2026SimpleConsole
             SBg(vs, new Color(0f, 0f, 0f, 0.6f));
             SOverflow(vs, "Hidden");
             AddChild(panel, viewport);
+
+            _logViewportPtr = Ptr(viewport);
 
             var content = VE();
             var cs = Style(content);
@@ -358,25 +378,17 @@ namespace CMS2026SimpleConsole
         {
             float rowTop = TitleH + Pad + LogViewH + Pad + InputH + Pad;
 
-            MakeButton(panel, "Clear",
-                Pad, rowTop, 80f, BtnBarH,
-                new Color(0.45f, 0.12f, 0.12f, 1f),
-                () => OnCommandSubmitted?.Invoke("__clear"));
+            MakeButton(panel, "Clear",Pad, rowTop, 80f, BtnBarH,new Color(0.45f, 0.12f, 0.12f, 1f),() => OnCommandSubmitted?.Invoke("__clear"));
 
-            MakeButton(panel, "Help",
-                Pad + 84f, rowTop, 80f, BtnBarH,
-                new Color(0.18f, 0.28f, 0.5f, 1f),
-                () => OnCommandSubmitted?.Invoke("help"));
+            MakeButton(panel, "Help",Pad + 84f, rowTop, 80f, BtnBarH,new Color(0.18f, 0.28f, 0.5f, 1f),() => OnCommandSubmitted?.Invoke("help"));
 
-            MakeButton(panel, "Copy log",
-                Pad + 168f, rowTop, 90f, BtnBarH,
-                new Color(0.18f, 0.28f, 0.5f, 1f),
-                () => OnCommandSubmitted?.Invoke("__copylog"));
+            MakeButton(panel, "Copy log",Pad + 168f, rowTop, 90f, BtnBarH,new Color(0.18f, 0.28f, 0.5f, 1f),() => OnCommandSubmitted?.Invoke("__copylog"));
 
-            MakeButton(panel, "→ IMGUI",
-                Pad + 262f, rowTop, 90f, BtnBarH,
-                new Color(0.3f, 0.2f, 0.45f, 1f),
-                () => OnCommandSubmitted?.Invoke("__switchrenderer"));
+            MakeButton(panel, "→ IMGUI",Pad + 262f, rowTop, 90f, BtnBarH,new Color(0.3f, 0.2f, 0.45f, 1f),() => OnCommandSubmitted?.Invoke("__switchrenderer"));
+
+            // ── Config toggle ─────────────────────────────────────────────────────
+            var cfgBtn = MakeButtonWithPtr(panel, "⚙  Config",Pad + 356f, rowTop, 92f, BtnBarH,new Color(0.15f, 0.38f, 0.28f, 1f),ToggleConfig);
+            _configBtnPtr = Ptr(cfgBtn);
         }
 
         private void BuildSignature(object panel)
@@ -398,6 +410,66 @@ namespace CMS2026SimpleConsole
         {
             MakeButtonWithPtr(parent, label, x, y, w, h, bg, onClick);
         }
+
+        // ── Config panel ─────────────────────────────────────────────────────────
+
+        private void BuildConfigPanel(object panel)
+        {
+            float vpTop = TitleH + Pad;
+
+            var cfg = VE();
+            var s = Style(cfg);
+            SPosition(s, "Absolute");
+            SLeft(s, Pad);
+            STop(s, vpTop);
+            SWidth(s, PanelW - Pad * 2);
+            SHeight(s, LogViewH);
+            SBg(s, new Color(0.04f, 0.06f, 0.10f, 1f));
+            SOverflow(s, "Hidden");
+            SOpacity(s, 0f);
+            AddChild(panel, cfg);
+            _configPanelPtr = Ptr(cfg);
+
+            // Zacznij ukryty — żeby nie łapał zdarzeń myszy
+            ApplyDisplay(_configPanelPtr, false);
+
+            // ── Header ───────────────────────────────────────────────────────────
+            CfgLabel(cfg, "⚙   Configuration",
+                Pad, 12f, PanelW - Pad * 4, 26f,
+                new Color(0.55f, 0.80f, 1.00f, 1f), fontSize: 13);
+
+            CfgDivider(cfg, 44f, new Color(0.30f, 0.45f, 0.75f, 0.8f));
+
+            // ── Sekcja: Renderer ─────────────────────────────────────────────────
+            CfgSectionLabel(cfg, "RENDERER", 54f);
+            float y = 74f;
+            CfgRow(cfg, "Use UIToolkit renderer", "Active", new Color(0.20f, 0.70f, 0.35f, 1f), ref y);
+            CfgRow(cfg, "Fallback to IMGUI on error", "ON", new Color(0.20f, 0.50f, 0.70f, 1f), ref y);
+
+            CfgDivider(cfg, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
+            y += 14f;
+
+            // ── Sekcja: Konsola ──────────────────────────────────────────────────
+            CfgSectionLabel(cfg, "CONSOLE", y);
+            y += 20f;
+            CfgRow(cfg, "Show timestamps in log", "ON", new Color(0.20f, 0.50f, 0.70f, 1f), ref y);
+            CfgRow(cfg, "Lock game input when open", "ON", new Color(0.20f, 0.50f, 0.70f, 1f), ref y);
+            CfgRow(cfg, "Max log lines (2000)", "SOON", new Color(0.35f, 0.35f, 0.40f, 1f), ref y);
+
+            CfgDivider(cfg, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
+            y += 14f;
+
+            // ── Stopka ───────────────────────────────────────────────────────────
+            CfgLabel(cfg,
+                "💡  This panel uses UIToolkit opacity + translate animation.\n" +
+                "    These effects are not available in IMGUI. Full config editing coming soon.",
+                Pad, y, PanelW - Pad * 5, 50f,
+                new Color(0.42f, 0.42f, 0.50f, 1f));
+        }
+
+
+
+
 
         // ── Public API ───────────────────────────────────────────────────────────
         public void SetVisible(bool visible)
@@ -439,6 +511,7 @@ namespace CMS2026SimpleConsole
             HandleScroll();
             HandleKeyboard();
             HandleDrag();
+            UpdateConfigAnimation();  
         }
 
         public void OnGUI() { }
@@ -672,6 +745,126 @@ namespace CMS2026SimpleConsole
                 : new Color(0.15f, 0.45f, 0.15f, 1f));
         }
 
+        // Helpers do budowania configu ─────────────────────────────────────────────
+
+        private void CfgLabel(object parent, string text,
+            float x, float y, float w, float h, Color col, int fontSize = 11)
+        {
+            var lbl = Activator.CreateInstance(_lblType);
+            var s = Style(lbl);
+            SPosition(s, "Absolute");
+            SLeft(s, x); STop(s, y);
+            SWidth(s, w); SHeight(s, h);
+            SFont(s);
+            SColor(s, col);
+            _lblType.GetProperty("text").SetValue(lbl, text);
+            AddChild(parent, lbl);
+        }
+
+        private void CfgSectionLabel(object parent, string text, float y)
+        {
+            CfgLabel(parent, text,
+                Pad, y, PanelW - Pad * 4, 18f,
+                new Color(0.40f, 0.55f, 0.75f, 1f));
+        }
+
+        private void CfgDivider(object parent, float y, Color col)
+        {
+            var div = VE();
+            var s = Style(div);
+            SPosition(s, "Absolute");
+            SLeft(s, Pad); STop(s, y);
+            SWidth(s, PanelW - Pad * 6); SHeight(s, 1f);
+            SBg(s, col);
+            AddChild(parent, div);
+        }
+
+        private void CfgRow(object parent, string desc, string badgeText, Color badgeColor, ref float y)
+        {
+            // Podświetlenie paska przy hoverze nie jest tutaj zrobione — placeholder
+            CfgLabel(parent, desc,
+                Pad * 2, y + 3f, PanelW - 180f, 20f,
+                new Color(0.82f, 0.85f, 0.92f, 1f));
+
+            MakeButton(parent, badgeText,
+                PanelW - Pad * 2 - 130f, y, 124f, 24f,
+                badgeColor,
+                () => { }); // TODO: podpięcie akcji
+
+            y += 34f;
+        }
+
+        // ── Przełącznik paneli ────────────────────────────────────────────────────
+
+        private void ToggleConfig()
+        {
+            _animTarget = (_animTarget > 0.5f) ? 0f : 1f;
+            RefreshConfigButtonLabel();
+        }
+
+        private void RefreshConfigButtonLabel()
+        {
+            if (_configBtnPtr == IntPtr.Zero) return;
+            bool showingConfig = _animTarget > 0.5f;
+            var btn = Activator.CreateInstance(_btnType, new object[] { _configBtnPtr });
+            _btnType.GetProperty("text").SetValue(btn, showingConfig ? "✕  Close" : "🔧  Config");
+            var s = Style(btn);
+            SBg(s, showingConfig
+                ? new Color(0.45f, 0.12f, 0.12f, 1f)
+                : new Color(0.15f, 0.38f, 0.28f, 1f));
+        }
+
+        // ── Animacja ─────────────────────────────────────────────────────────────
+
+        private void UpdateConfigAnimation()
+        {
+            if (Mathf.Abs(_animProgress - _animTarget) < 0.001f) return;
+
+            _animProgress = Mathf.MoveTowards(
+                _animProgress, _animTarget, AnimSpeed * Time.deltaTime);
+
+            float t = SmoothStep(_animProgress);
+
+            // Log viewport: zanika w górę
+            if (_logViewportPtr != IntPtr.Zero)
+            {
+                if (_animProgress >= 0.99f)
+                {
+                    // W pełni ukryty — wyłącz żeby nie blokował zdarzeń
+                    ApplyDisplay(_logViewportPtr, false);
+                }
+                else
+                {
+                    ApplyDisplay(_logViewportPtr, true);
+                    var lv = Wrap(_logViewportPtr);
+                    var ls = Style(lv);
+                    SOpacity(ls, 1f - t);
+                    STop(ls, (TitleH + Pad) - t * 22f);
+                }
+            }
+
+            // Config panel: pojawia się z dołu
+            if (_configPanelPtr != IntPtr.Zero)
+            {
+                if (_animProgress <= 0.01f)
+                {
+                    ApplyDisplay(_configPanelPtr, false);
+                }
+                else
+                {
+                    ApplyDisplay(_configPanelPtr, true);
+                    var cv = Wrap(_configPanelPtr);
+                    var cs = Style(cv);
+                    SOpacity(cs, t);
+                    STop(cs, (TitleH + Pad) + (1f - t) * 22f);
+                }
+            }
+        }
+
+        // Smoothstep — przyjemniejszy niż linear
+        private static float SmoothStep(float t) => t * t * (3f - 2f * t);
+
+
         // ── Reflection micro-helpers ─────────────────────────────────────────────
         private object VE() => Activator.CreateInstance(_veType);
         private object Wrap(IntPtr p) =>
@@ -707,5 +900,8 @@ namespace CMS2026SimpleConsole
         private void SFont(object s) =>
             _sType.GetProperty("unityFontDefinition").SetValue(s,
                 _sfdCtor.Invoke(new object[] { _fontDef }));
+
+        private void SOpacity(object s, float v) =>
+    _sType.GetProperty("opacity").SetValue(s, _sfCtor.Invoke(new object[] { v }));
     }
 }
