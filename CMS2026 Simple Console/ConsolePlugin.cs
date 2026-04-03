@@ -8,7 +8,7 @@ using System.Runtime.Loader;
 using UnityEngine;
 
 [assembly: MelonInfo(typeof(CMS2026SimpleConsole.ConsolePlugin),
-    "CMS2026 Simple  Console", "1.0.3", "Blaster")]
+    "CMS2026 Simple  Console", "1.1.0", "Blaster")]
 [assembly: MelonGame("Red Dot Games", "Car Mechanic Simulator 2026 Demo")]
 [assembly: MelonGame("Red Dot Games", "Car Mechanic Simulator 2026")]
 
@@ -16,7 +16,7 @@ namespace CMS2026SimpleConsole
 {
     public class ConsolePlugin : MelonMod
     {
-        public const string Version = "1.0.3";
+        public const string Version = "1.1.0";
 
         public static string ModDir { get; private set; }
         public static MelonLogger.Instance Log => Melon<ConsolePlugin>.Logger;

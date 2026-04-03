@@ -78,7 +78,11 @@ namespace CMS2026SimpleConsole
         private float _pendingPanelWidth = 0f;   
         private float _pendingHeight = 0f;   
         private IntPtr _pendingWidthLabelPtr = IntPtr.Zero;  
-        private IntPtr _pendingHeightLabelPtr = IntPtr.Zero;  
+        private IntPtr _pendingHeightLabelPtr = IntPtr.Zero;
+
+        // ── Opacity pending ───────────────────────────────────────────────────────
+        private float _pendingOpacity = 0.93f;
+        private IntPtr _pendingOpacityLabelPtr = IntPtr.Zero;
 
         // ── Animation ────────────────────────────────────────────────────────────
         private float _animProgress = 0f;
@@ -254,7 +258,9 @@ namespace CMS2026SimpleConsole
             SPosition(s, "Absolute");
             SLeft(s, _panelX); STop(s, _panelY);
             SWidth(s, PanelW); SHeight(s, PanelH);
-            SBg(s, new Color(0.08f, 0.08f, 0.1f, 0.93f));
+
+            float bgAlpha = float.TryParse(ConsolePlugin.Config?.GetString("console_opacity", "0.93"), out float _opa)? Mathf.Clamp(_opa, 0.10f, 1f) : 0.93f;
+            SBg(s, new Color(0.08f, 0.08f, 0.1f, bgAlpha));
             SOverflow(s, "Hidden");
             AddChild(root, panel);
             _panelPtr = Ptr(panel);
@@ -396,7 +402,7 @@ namespace CMS2026SimpleConsole
                 () => OnCommandSubmitted?.Invoke("__copylog"));
 
             // → IMGUI moved to config panel. "⚙ Config" takes its old slot.
-            var cfgBtn = MakeButtonWithPtr(panel, "⚙  Config",
+            var cfgBtn = MakeButtonWithPtr(panel, "🔧  Config",
                 Pad + 262f, rowTop, 92f, BtnBarH,
                 new Color(0.15f, 0.38f, 0.28f, 1f),
                 ToggleConfig);
@@ -445,7 +451,7 @@ namespace CMS2026SimpleConsole
             _cfgToggleBtns.Clear();
 
             // Header
-            CfgLabel(content, "⚙   Configuration",
+            CfgLabel(content, "🔧   Configuration",
                 Pad, y, PanelW - Pad * 4, 26f,
                 new Color(0.55f, 0.80f, 1.00f, 1f), fontSize: 13);
             y += 30f;
@@ -454,7 +460,7 @@ namespace CMS2026SimpleConsole
             y += 10f;
 
             // Mod Folder button
-            MakeButton(content, "Mod Folder",
+            MakeButton(content, "📁 Mod Folder",
                 Pad, y, 100f, 24f,
                 new Color(0.18f, 0.28f, 0.48f, 1f),
                 () => OnCommandSubmitted?.Invoke("__openfolder"));
@@ -503,6 +509,9 @@ namespace CMS2026SimpleConsole
             CfgPanelSizeRow(content, "Panel width", "panel_width", 560f, 1400f, ref y);
             CfgPanelSizeRow(content, "Panel height", "panel_height", 300f, 1000f, ref y);
 
+            //opacity panel
+            CfgOpacityRow(content, ref y);
+
             CfgDivider(content, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
             y += 14f;
 
@@ -526,8 +535,7 @@ namespace CMS2026SimpleConsole
                 () =>
                 {
                     ConsolePlugin.Config?.RestoreDefaults();
-                    RefreshAllConfigToggles();
-                    OnCommandSubmitted?.Invoke("__applyconfig");
+                    RebuildForResize();   // rebuild czyta świeże wartości z configu
                 });
             y += 40f;
 
@@ -763,6 +771,56 @@ namespace CMS2026SimpleConsole
             }
         }
 
+        private void CfgOpacityRow(object parent, ref float y)
+        {
+            float def = 0.93f;
+            _pendingOpacity = float.TryParse(
+                ConsolePlugin.Config?.GetString("console_opacity", "0.93"), out float cv)
+                ? Mathf.Clamp(cv, 0.10f, 1.00f) : def;
+
+            var lbl = MakeButtonWithPtr(parent,
+                Mathf.RoundToInt(_pendingOpacity * 100f) + "%",
+                PanelW - Pad * 2 - 130f, y, 62f, 24f,
+                new Color(0.10f, 0.10f, 0.16f, 1f),
+                () => { });
+            _pendingOpacityLabelPtr = Ptr(lbl);
+
+            MakeButton(parent, "−",
+                PanelW - Pad * 2 - 64f, y, 28f, 24f,
+                new Color(0.38f, 0.18f, 0.18f, 1f),
+                () => StepOpacity(-0.05f));
+
+            MakeButton(parent, "+",
+                PanelW - Pad * 2 - 32f, y, 28f, 24f,
+                new Color(0.18f, 0.38f, 0.18f, 1f),
+                () => StepOpacity(+0.05f));
+
+            MakeButton(parent, "Set",
+                PanelW - Pad * 2 - 130f, y + 28f, 94f, 22f,
+                new Color(0.20f, 0.45f, 0.20f, 1f),
+                () =>
+                {
+                    ConsolePlugin.Config?.Set("console_opacity",
+                        _pendingOpacity.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                    RebuildForResize();
+                });
+
+            CfgLabel(parent, "Window opacity  (UIToolkit only)",
+                Pad * 2, y + 3f, PanelW - 180f, 20f,
+                new Color(0.82f, 0.85f, 0.92f, 1f));
+            y += 56f;
+        }
+
+        private void StepOpacity(float delta)
+        {
+            _pendingOpacity = Mathf.Round(
+                Mathf.Clamp(_pendingOpacity + delta, 0.10f, 1.00f) * 100f) / 100f;
+            if (_pendingOpacityLabelPtr == IntPtr.Zero) return;
+            var b = Activator.CreateInstance(_btnType, new object[] { _pendingOpacityLabelPtr });
+            _btnType.GetProperty("text").SetValue(b,
+                Mathf.RoundToInt(_pendingOpacity * 100f) + "%");
+        }
+
         public void RefreshKeybindLabels()
         {
             if (ConsolePlugin.Config == null) return;
@@ -916,7 +974,9 @@ namespace CMS2026SimpleConsole
             _maxLogValuePtr = IntPtr.Zero;
 
             _pendingWidthLabelPtr = IntPtr.Zero;   
-            _pendingHeightLabelPtr = IntPtr.Zero;   
+            _pendingHeightLabelPtr = IntPtr.Zero;
+
+            _pendingOpacityLabelPtr = IntPtr.Zero;
 
             _panelWidthValuePtr = IntPtr.Zero;
             _panelHeightValuePtr = IntPtr.Zero;
@@ -1026,7 +1086,7 @@ namespace CMS2026SimpleConsole
             if (_configBtnPtr == IntPtr.Zero) return;
             bool showingConfig = _animTarget > 0.5f;
             var btn = Activator.CreateInstance(_btnType, new object[] { _configBtnPtr });
-            _btnType.GetProperty("text").SetValue(btn, showingConfig ? "✕  Close" : "⚙  Config");
+            _btnType.GetProperty("text").SetValue(btn, showingConfig ? "✕  Close" : "🔧  Config");
             var s = Style(btn);
             SBg(s, showingConfig
                 ? new Color(0.45f, 0.12f, 0.12f, 1f)

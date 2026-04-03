@@ -119,7 +119,7 @@ public static class __Repl
                 catch { }
             }
 
-            _log($"[REPL] References: {ok} OK, {skip} pominięto");
+            _log($"[REPL] References: {ok} OK, {skip} skiped.");
         }
 
         public void Evaluate(string userCode)

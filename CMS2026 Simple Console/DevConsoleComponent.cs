@@ -215,8 +215,8 @@ namespace CMS2026SimpleConsole
                 normal = { textColor = new Color(0.65f, 0.80f, 1f, 1f) }
             };
             string hintText = _bindingAllowDisable
-                ? "ESC — anuluj   |   DELETE — wyłącz klawisz"
-                : "ESC — anuluj";
+                ? "ESC — cancel   |   DELETE — disable key"
+                : "ESC — cancel";
             GUI.Label(new Rect(bx, by + 68f, bw, 28f), hintText, hint);
         }
 
@@ -331,10 +331,10 @@ namespace CMS2026SimpleConsole
             _bindingConfigKey = configKey;
             _bindingAllowDisable = allowDisable;
             _bindingOnComplete = onComplete;
-            _bindingPromptText = $"Naciśnij klawisz dla:  [{configKey}]";
+            _bindingPromptText = $"Press the key for:  [{configKey}]";
             _waitingForKey = true;
-            AddLog($"[KeyBind] Czekam na klawisz...  " +
-                   $"(ESC=anuluj{(allowDisable ? ", DEL=wyłącz" : "")})");
+            AddLog($"[KeyBind] Waiting for the key...  " +
+                   $"(ESC=cancel{(allowDisable ? ", DEL=disable" : "")})");
         }
 
         private static KeyCode ParseKey(string value, KeyCode fallback = KeyCode.None)

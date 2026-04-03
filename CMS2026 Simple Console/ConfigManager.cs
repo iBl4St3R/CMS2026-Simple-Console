@@ -21,6 +21,7 @@ namespace CMS2026SimpleConsole
             { "standalone_lock_key",   "None"  },
             { "panel_width",           "660"   },
             { "panel_height",          "500"   },
+            { "console_opacity",       "0.93"  },
         };
 
         public ConfigManager(string modDir, Action<string> log)
