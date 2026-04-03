@@ -198,6 +198,30 @@ namespace CMS2026SimpleConsole
                         break;
 
 
+                    case "runfile":
+                        if (_cmdParts.Length < 2)
+                        {
+                            AddLog("Usage: runfile <filename>");
+                            AddLog("Example: runfile script.cs");
+                            AddLog($"Scripts folder: {DumpDir}");
+                            break;
+                        }
+                        string fileName = string.Join(" ", _cmdParts.Skip(1));
+                        string filePath = Path.IsPathRooted(fileName)
+                            ? fileName
+                            : Path.Combine(DumpDir, fileName);
+
+                        if (!File.Exists(filePath))
+                        {
+                            AddLog($"[runfile] File not found: {filePath}");
+                            break;
+                        }
+                        string fileCode = File.ReadAllText(filePath);
+                        AddLog($"[runfile] Running: {Path.GetFileName(filePath)}");
+                        _repl.Evaluate(fileCode);
+                        break;
+
+
                     //case "setconfig":
                     //    if (_cmdParts.Length < 3)
                     //    {
@@ -318,6 +342,7 @@ namespace CMS2026SimpleConsole
                     case "help":
                         AddLog("Commands:");
                         AddLog("  run <C# code>       – Compile and run the C# code.");
+                        AddLog("  runfile <file.cs>    – run C# script from mod folder");
                         //AddLog("  setconfig <k> <v>   – ustaw opcję i zapisz do pliku");
                         //AddLog("  config               – pokaż wszystkie opcje");
                         //AddLog("  Opcje: autolock=true/false");
