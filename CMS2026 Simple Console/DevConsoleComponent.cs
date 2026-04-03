@@ -24,14 +24,25 @@ namespace CMS2026SimpleConsole
         private Il2CppCMS.Player.Controller.PlayerInput _playerInput;
         private bool _inputLocked = false;
 
+        // ── Standalone input lock ─────────────────────────────────────────────
+        private bool _standaloneLockActive = false;
+
+        // ── Key binding ───────────────────────────────────────────────────────
+        private bool _waitingForKey = false;
+        private string _bindingConfigKey = "";
+        private bool _bindingAllowDisable = true;
+        private Action _bindingOnComplete = null;
+        private string _bindingPromptText = "";
+
         // ── Renderer ─────────────────────────────────────────────────────────────
         private IConsoleRenderer _renderer;
         private ReplEvaluator _repl;
         private ConfigManager _config;
 
         private readonly List<string> _logLines = new List<string>();
-        private const int MaxLogLines = 2000;
         private string[] _cmdParts;
+
+        private int MaxLogLines =>int.TryParse(_config?.GetString("max_log_lines", "2000"), out int v) && v >= 100? v : 2000;
 
         private string DumpDir => Path.Combine(ConsolePlugin.ModDir, "CMS2026SimpleConsole");
 
@@ -94,7 +105,55 @@ namespace CMS2026SimpleConsole
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F7))
+            // ── Key-binding capture — blokuje resztę Update ───────────────────
+            if (_waitingForKey)
+            {
+                foreach (KeyCode kc in System.Enum.GetValues(typeof(KeyCode)))
+                {
+                    if (!Input.GetKeyDown(kc)) continue;
+
+                    if (kc == KeyCode.Escape)
+                    {
+                        _waitingForKey = false;
+                        AddLog("[KeyBind] Cancelled.");
+                    }
+                    else if (kc == KeyCode.Delete && _bindingAllowDisable)
+                    {
+                        _config.Set(_bindingConfigKey, "None");
+                        _waitingForKey = false;
+                        AddLog($"[KeyBind] {_bindingConfigKey} disabled.");
+                        _bindingOnComplete?.Invoke();
+                    }
+                    else if (kc != KeyCode.Delete)
+                    {
+                        _config.Set(_bindingConfigKey, kc.ToString());
+                        _waitingForKey = false;
+                        AddLog($"[KeyBind] {_bindingConfigKey} = {kc}");
+                        _bindingOnComplete?.Invoke();
+                    }
+                    return;
+                }
+                _renderer.OnUpdate();
+                return;
+            }
+
+            // ── Standalone lock toggle ────────────────────────────────────────
+            KeyCode standaloneKey = ParseKey(_config?.GetString("standalone_lock_key", "None"));
+            if (standaloneKey != KeyCode.None && Input.GetKeyDown(standaloneKey))
+            {
+                // Konsola z lock_input_when_open=ON ma priorytet — nie zmieniamy stanu
+                bool consoleForcesLock = _renderer.IsVisible &&
+                                         (_config?.GetBool("lock_input_when_open", true) ?? true);
+                if (!consoleForcesLock)
+                {
+                    _standaloneLockActive = !_standaloneLockActive;
+                    AddLog($"[Input] Standalone lock: {(_standaloneLockActive ? "ON" : "OFF")}");
+                }
+            }
+
+            // ── Toggle console ────────────────────────────────────────────────
+            KeyCode toggleKey = ParseKey(_config?.GetString("toggle_console_key", "F7"), KeyCode.F7);
+            if (Input.GetKeyDown(toggleKey))
                 _renderer.SetVisible(!_renderer.IsVisible);
 
             _renderer.OnUpdate();
@@ -102,29 +161,60 @@ namespace CMS2026SimpleConsole
 
         private void LateUpdate()
         {
-            bool lockInput = _config?.GetBool("lock_input_when_open", true) ?? true;
+            bool lockWhenOpen = _config?.GetBool("lock_input_when_open", true) ?? true;
+            bool consoleLocks = _renderer.IsVisible && lockWhenOpen;
+            bool effectiveLock = consoleLocks || _standaloneLockActive;
+
+            if (effectiveLock != _inputLocked)
+            {
+                _inputLocked = effectiveLock;
+                SetGameInputEnabled(!effectiveLock);
+            }
 
             if (_renderer.IsVisible)
             {
-                if (!_inputLocked)
-                {
-                    _inputLocked = true;
-                    if (lockInput) SetGameInputEnabled(false);
-                }
                 if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
                 if (!Cursor.visible) Cursor.visible = true;
             }
-            else
-            {
-                if (_inputLocked)
-                {
-                    _inputLocked = false;
-                    if (lockInput) SetGameInputEnabled(true);
-                }
-            }
         }
 
-        private void OnGUI() => _renderer.OnGUI();
+        private void OnGUI()
+        {
+            _renderer.OnGUI();
+
+            if (!_waitingForKey) return;
+
+            // Przyciemnienie tła
+            GUI.color = new Color(0f, 0f, 0f, 0.6f);
+            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+
+            float bw = 500f, bh = 120f;
+            float bx = (Screen.width - bw) * 0.5f;
+            float by = (Screen.height - bh) * 0.5f;
+
+            GUI.backgroundColor = new Color(0.08f, 0.10f, 0.18f, 1f);
+            GUI.Box(new Rect(bx, by, bw, bh), "");
+
+            var title = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 15,
+                wordWrap = true,
+                normal = { textColor = Color.white }
+            };
+            GUI.Label(new Rect(bx, by + 16f, bw, 38f), _bindingPromptText, title);
+
+            var hint = new GUIStyle(title)
+            {
+                fontSize = 12,
+                normal = { textColor = new Color(0.65f, 0.80f, 1f, 1f) }
+            };
+            string hintText = _bindingAllowDisable
+                ? "ESC — anuluj   |   DELETE — wyłącz klawisz"
+                : "ESC — anuluj";
+            GUI.Label(new Rect(bx, by + 68f, bw, 28f), hintText, hint);
+        }
 
         private void OnDestroy()
         {
@@ -144,6 +234,18 @@ namespace CMS2026SimpleConsole
             if (raw == "__openconfig") { OpenConfigFile(); return; }
             if (raw == "__openfolder") { OpenModFolder(); return; }
             if (raw == "__applyconfig") { ApplyConfig(); return; }
+
+            if (raw.StartsWith("__startbind:"))
+            {
+                string cfgKey = raw.Substring("__startbind:".Length).Trim();
+                bool allowDis = cfgKey != "toggle_console_key";
+                StartKeyBinding(cfgKey, allowDis, () =>
+                {
+                    if (_renderer is UIToolkitConsoleRenderer uitR)
+                        uitR.RefreshKeybindLabels();
+                });
+                return;
+            }
 
             ExecuteCommand(raw);
         }
@@ -176,12 +278,15 @@ namespace CMS2026SimpleConsole
 
         private void ApplyConfig()
         {
-            // Re-read live values — LateUpdate reads lock_input_when_open per frame already.
-            // Max log lines:
             if (_config != null &&
-                int.TryParse(_config.GetString("max_log_lines", "2000"), out int maxLines))
+                int.TryParse(_config.GetString("max_log_lines", "2000"), out int maxLines) &&
+                maxLines >= 100)
             {
-                // maxLines would be used for future log trimming
+                while (_logLines.Count > maxLines)
+                    _logLines.RemoveAt(0);
+
+                //if (_renderer is UIToolkitConsoleRenderer uitR2)
+                //    uitR2.RebuildIfNeeded(_logLines.Count);   // opcjonalne
             }
             AddLog("[Config] Settings applied.");
         }
@@ -213,6 +318,27 @@ namespace CMS2026SimpleConsole
                 AddLog("[Renderer] Switched to IMGUI");
             }
         }
+
+        private void StartKeyBinding(string configKey, bool allowDisable, Action onComplete = null)
+        {
+            _bindingConfigKey = configKey;
+            _bindingAllowDisable = allowDisable;
+            _bindingOnComplete = onComplete;
+            _bindingPromptText = $"Naciśnij klawisz dla:  [{configKey}]";
+            _waitingForKey = true;
+            AddLog($"[KeyBind] Czekam na klawisz...  " +
+                   $"(ESC=anuluj{(allowDisable ? ", DEL=wyłącz" : "")})");
+        }
+
+        private static KeyCode ParseKey(string value, KeyCode fallback = KeyCode.None)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return fallback;
+            try { return (KeyCode)System.Enum.Parse(typeof(KeyCode), value, true); }
+            catch { return fallback; }
+        }
+
+
+
 
         // ── AddLog — respects show_timestamps config ──────────────────────────────
         private void AddLog(string line)

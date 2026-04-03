@@ -16,6 +16,8 @@ namespace CMS2026SimpleConsole
             { "show_timestamps",       "true"  },
             { "lock_input_when_open",  "true"  },
             { "max_log_lines",         "2000"  },
+            { "toggle_console_key",    "F7"    },   
+            { "standalone_lock_key",   "None"  }, 
         };
 
         public ConfigManager(string modDir, Action<string> log)

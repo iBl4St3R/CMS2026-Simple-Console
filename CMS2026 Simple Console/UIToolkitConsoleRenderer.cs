@@ -70,6 +70,9 @@ namespace CMS2026SimpleConsole
         // Config toggle button pointers keyed by config key
         private readonly Dictionary<string, IntPtr> _cfgToggleBtns = new Dictionary<string, IntPtr>();
 
+        private readonly Dictionary<string, IntPtr> _keybindLabelPtrs = new Dictionary<string, IntPtr>();
+        private IntPtr _maxLogValuePtr = IntPtr.Zero;
+
         // ── Animation ────────────────────────────────────────────────────────────
         private float _animProgress = 0f;
         private float _animTarget = 0f;
@@ -485,7 +488,7 @@ namespace CMS2026SimpleConsole
             CfgToggleRow(content, "Lock game input when open", "lock_input_when_open", ref y);
 
             // Max log lines — placeholder
-            CfgPlaceholderRow(content, "Max log lines  (2000)", "2000", ref y);
+            CfgMaxLogRow(content, ref y);
 
             CfgDivider(content, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
             y += 14f;
@@ -495,10 +498,10 @@ namespace CMS2026SimpleConsole
             y += 22f;
 
             // Default console key — placeholder TODO
-            CfgPlaceholderRow(content, "Toggle console key", "F7", ref y);
+            CfgKeybindRow(content, "Klawisz toggle konsoli", "toggle_console_key", ref y);
 
             // Lock game input standalone — placeholder TODO (unbound)
-            CfgPlaceholderRow(content, "Lock game input (standalone)", "—", ref y);
+            CfgKeybindRow(content, "Lock input (standalone)", "standalone_lock_key", ref y);
 
             CfgDivider(content, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));
             y += 14f;
@@ -552,6 +555,91 @@ namespace CMS2026SimpleConsole
             y += 34f;
         }
 
+        private void CfgKeybindRow(object parent, string desc, string configKey, ref float y)
+        {
+            string cur = ConsolePlugin.Config?.GetString(configKey, "None") ?? "None";
+
+            var btn = MakeButtonWithPtr(parent, cur,
+                PanelW - Pad * 2 - 130f, y, 96f, 24f,
+                new Color(0.18f, 0.28f, 0.48f, 1f),
+                () => OnCommandSubmitted?.Invoke("__startbind:" + configKey));
+
+            MakeButton(parent, "✎",
+                PanelW - Pad * 2 - 30f, y, 24f, 24f,
+                new Color(0.12f, 0.22f, 0.40f, 1f),
+                () => OnCommandSubmitted?.Invoke("__startbind:" + configKey));
+
+            _keybindLabelPtrs[configKey] = Ptr(btn);
+
+            CfgLabel(parent, desc,
+                Pad * 2, y + 3f, PanelW - 180f, 20f,
+                new Color(0.82f, 0.85f, 0.92f, 1f));
+            y += 34f;
+        }
+
+        private void CfgMaxLogRow(object parent, ref float y)
+        {
+            string cur = ConsolePlugin.Config?.GetString("max_log_lines", "2000") ?? "2000";
+
+            var lbl = MakeButtonWithPtr(parent, cur,
+                PanelW - Pad * 2 - 130f, y, 62f, 24f,
+                new Color(0.10f, 0.10f, 0.16f, 1f),
+                () => { });
+            _maxLogValuePtr = Ptr(lbl);
+
+            MakeButton(parent, "−",
+                PanelW - Pad * 2 - 64f, y, 28f, 24f,
+                new Color(0.38f, 0.18f, 0.18f, 1f),
+                () => StepMaxLogLines(-500));
+
+            MakeButton(parent, "+",
+                PanelW - Pad * 2 - 32f, y, 28f, 24f,
+                new Color(0.18f, 0.38f, 0.18f, 1f),
+                () => StepMaxLogLines(+500));
+
+            CfgLabel(parent, "Max log lines",
+                Pad * 2, y + 3f, PanelW - 180f, 20f,
+                new Color(0.82f, 0.85f, 0.92f, 1f));
+            y += 34f;
+        }
+
+        private void StepMaxLogLines(int delta)
+        {
+            if (ConsolePlugin.Config == null) return;
+            int cur = int.TryParse(
+                ConsolePlugin.Config.GetString("max_log_lines", "2000"), out int v) ? v : 2000;
+            int next = Mathf.Clamp(cur + delta, 100, 10000);
+            ConsolePlugin.Config.Set("max_log_lines", next.ToString());
+            if (_maxLogValuePtr != IntPtr.Zero)
+            {
+                var b = Activator.CreateInstance(_btnType, new object[] { _maxLogValuePtr });
+                _btnType.GetProperty("text").SetValue(b, next.ToString());
+            }
+            OnCommandSubmitted?.Invoke("__applyconfig");
+        }
+
+        public void RefreshKeybindLabels()
+        {
+            if (ConsolePlugin.Config == null) return;
+            foreach (var kv in _keybindLabelPtrs)
+            {
+                if (kv.Value == IntPtr.Zero) continue;
+                string val = ConsolePlugin.Config.GetString(kv.Key, "None");
+                var btn = Activator.CreateInstance(_btnType, new object[] { kv.Value });
+                _btnType.GetProperty("text").SetValue(btn, val);
+            }
+        }
+
+        private void RefreshMaxLogLabel()
+        {
+            if (_maxLogValuePtr == IntPtr.Zero || ConsolePlugin.Config == null) return;
+            var b = Activator.CreateInstance(_btnType, new object[] { _maxLogValuePtr });
+            _btnType.GetProperty("text").SetValue(b,
+                ConsolePlugin.Config.GetString("max_log_lines", "2000"));
+        }
+
+
+
         private void ToggleConfigKey(string key)
         {
             if (ConsolePlugin.Config == null) return;
@@ -575,6 +663,9 @@ namespace CMS2026SimpleConsole
             if (ConsolePlugin.Config == null) return;
             foreach (var kv in _cfgToggleBtns)
                 UpdateToggleBtn(kv.Key, ConsolePlugin.Config.GetBool(kv.Key, true));
+
+            RefreshKeybindLabels();
+            RefreshMaxLogLabel();
         }
 
         // ── Public API ────────────────────────────────────────────────────────────
