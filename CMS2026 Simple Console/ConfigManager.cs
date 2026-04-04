@@ -16,7 +16,7 @@ namespace CMS2026SimpleConsole
             { "show_timestamps",       "true"  },
             { "lock_input_when_open",  "true"  },
             { "show_at_startup",       "true"  },
-            { "capture_unity_logs",    "true"  },
+            { "capture_unity_logs",    "false"  },
             { "max_log_lines",         "2000"  },
             { "toggle_console_key",    "F7"    },
             { "standalone_lock_key",   "None"  },

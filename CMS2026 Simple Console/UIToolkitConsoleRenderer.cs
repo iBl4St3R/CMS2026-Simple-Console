@@ -1192,8 +1192,18 @@ namespace CMS2026SimpleConsole
             float usableW = PanelW - Pad * 4;
             const float CharW = 7.5f;
             int charsPerLine = Mathf.Max(1, Mathf.FloorToInt(usableW / CharW));
-            int linesNeeded = Mathf.Max(1, Mathf.CeilToInt((float)text.Length / charsPerLine));
-            float labelH = linesNeeded * LineH;
+
+            // ── Uwzględnij prawdziwe \n oraz zawijanie tekstu ─────────────────────────
+            string[] hardLines = text.Split('\n');
+            int totalLines = 0;
+            foreach (string hardLine in hardLines)
+            {
+                // Strip tagów żeby nie liczyć znaków HTML jako widocznych
+                string plain = System.Text.RegularExpressions.Regex.Replace(hardLine, "<.*?>", "");
+                int wrappedLines = Mathf.Max(1, Mathf.CeilToInt((float)plain.Length / charsPerLine));
+                totalLines += wrappedLines;
+            }
+            float labelH = totalLines * LineH;
 
             var lbl = Activator.CreateInstance(_lblType);
             var s = Style(lbl);
