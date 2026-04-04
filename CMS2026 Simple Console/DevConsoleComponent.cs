@@ -245,27 +245,24 @@ namespace CMS2026SimpleConsole
         private void OnUnityLog(string condition, string stackTrace, LogType type)
         {
             if (!(_config?.GetBool("capture_unity_logs", true) ?? true)) return;
-
-            // Ignoruj własne logi konsoli żeby nie było pętli
             if (condition.StartsWith("[CMS2026") || condition.StartsWith(">")) return;
 
             string prefix = type switch
             {
-                LogType.Error => "[Unity:ERR] ",
-                LogType.Exception => "[Unity:EXC] ",
-                LogType.Warning => "[Unity:WRN] ",
-                LogType.Assert => "[Unity:AST] ",
-                _ => "[Unity:LOG] "
+                LogType.Error => "<color=#c85050>[Unity:ERR]</color> ",
+                LogType.Exception => "<color=#e04040>[Unity:EXC]</color> ",
+                LogType.Warning => "<color=#c8922a>[Unity:WRN]</color> ",
+                LogType.Assert => "<color=#a060c0>[Unity:AST]</color> ",
+                _ => "<color=#606878>[Unity:LOG]</color> "
             };
 
             AddLog(prefix + condition);
 
-            // Dla wyjątków dopisz pierwszą linię stacktrace
             if (type == LogType.Exception && !string.IsNullOrEmpty(stackTrace))
             {
                 string firstLine = stackTrace.Split('\n')[0].Trim();
                 if (!string.IsNullOrEmpty(firstLine))
-                    AddLog("         at " + firstLine);
+                    AddLog($"<color=#804040>         at {firstLine}</color>");
             }
         }
 
@@ -405,22 +402,76 @@ namespace CMS2026SimpleConsole
             catch { return fallback; }
         }
 
+        private string ColorizeLog(string line)
+        {
+            // ── Command echo ──────────────────────────────────────────────────────────
+            if (line.StartsWith("> "))
+                return $"<color=#7ec8a0>></color><color=#a8d8b8>{line.Substring(1)}</color>";
 
+            // ── Prefix detection ──────────────────────────────────────────────────────
+            if (!line.StartsWith("[")) return line;
+
+            int end = line.IndexOf(']');
+            if (end < 1) return line;
+
+            string tag = line.Substring(0, end + 1);
+            string rest = line.Substring(end + 1);
+            string col = GetTagColor(tag);
+
+            return col != null
+                ? $"<color={col}>{tag}</color>{rest}"
+                : line;
+        }
+        private static string GetTagColor(string tag) => tag switch
+        {
+            "[CMS2026SimpleConsole]" => "#5b8ab0",
+            "[Console]" => "#5b8ab0",
+            "[Config]" => "#5ba8a8",
+            "[REPL]" => "#9b80c8",
+            "[eval]" => "#9b80c8",
+            "[runfile]" => "#9b80c8",
+            "[Renderer]" => "#7878c0",
+            "[UIToolkit]" => "#7878c0",
+            "[API]" => "#50a878",
+            "[Save]" => "#6898c0",
+            "[Game]" => "#6898c0",
+            "[Saves]" => "#6898c0",
+            "[Mods]" => "#6898c0",
+            "[Cars]" => "#6898c0",
+            "[Input]" => "#8888a0",
+            "[InputBlock]" => "#8888a0",
+            "[KeyBind]" => "#a0a860",
+            "[Inspect]" => "#78b890",
+            "[Dump]" => "#78b890",
+            "[GarageCars]" => "#78a080",
+            "[Parking]" => "#78a080",
+            "[Store]" => "#78a080",
+            "[Unstore]" => "#78a080",
+            "[fixcar]" => "#78a080",
+            "[stealcustomercar]" => "#c87840",
+            "[Heart]" => "#e87898",
+            "[ERR]" => "#e05555",
+            "[?]" => "#c87840",
+            _ => null
+        };
 
 
         // ── AddLog — respects show_timestamps config ──────────────────────────────
         private void AddLog(string line)
         {
             bool showTs = _config?.GetBool("show_timestamps", true) ?? true;
+
+            string colored = ColorizeLog(line);
+
             string entry = showTs
-                ? "[" + DateTime.Now.ToString("HH:mm:ss") + "] " + line
-                : line;
+                ? $"<color=#4a7fa5>[{DateTime.Now:HH:mm:ss}]</color> {colored}"
+                : colored;
 
             _logLines.Add(entry);
             if (_logLines.Count > MaxLogLines) _logLines.RemoveAt(0);
 
             _renderer?.AddLine(entry);
-            ConsolePlugin.Log.Msg(line);
+            ConsolePlugin.Log.Msg(line);   // MelonLoader dostaje czysty string
         }
 
         // ── Command interpreter ───────────────────────────────────────────────────
