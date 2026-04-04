@@ -70,6 +70,17 @@ namespace CMS2026SimpleConsole
         private float _configScrollY = 0f;
         private float _configContentH = 0f;
 
+        // ── Heart panel ──────────────────────────────────────────────────────────────
+        private IntPtr _heartPanelPtr;
+        private IntPtr _heartContentPtr;
+        private IntPtr _heartBtnPtr;
+        private float _heartAnimProgress = 0f;
+        private float _heartAnimTarget = 0f;
+        private float _heartContentH = 0f;
+        private float _heartScrollY = 0f;
+
+
+
         // Config toggle button pointers keyed by config key
         private readonly Dictionary<string, IntPtr> _cfgToggleBtns = new Dictionary<string, IntPtr>();
 
@@ -268,6 +279,7 @@ namespace CMS2026SimpleConsole
             BuildTitleBar(panel);
             BuildLogArea(panel);
             BuildConfigPanel(panel);
+            BuildHeartPanel(panel);
             BuildInputRow(panel);
             BuildButtonRow(panel);
             BuildSignature(panel);
@@ -297,7 +309,7 @@ namespace CMS2026SimpleConsole
             SColor(s, Color.white);
             SFont(s);
             _lblType.GetProperty("text").SetValue(lbl,
-                "  CMS2026 Simple Console  [F7=hide] [UIToolkit]");
+                "  CMS2026 Simple Console");
             AddChild(panel, lbl);
         }
 
@@ -412,8 +424,20 @@ namespace CMS2026SimpleConsole
         private void BuildSignature(object panel)
         {
             float rowTop = TitleH + Pad + LogViewH + Pad + InputH + Pad;
-            string sigLabel = $"SC {ConsolePlugin.Version} by Blaster";
 
+            const float HeartBtnW = 72f;
+            const float Gap = 4f;
+            // Kończymy tuż przed podpisem: PanelW - 148f - Gap - HeartBtnW
+            float heartBtnX = PanelW - 148f - Gap - HeartBtnW;
+
+            var heartBtn = MakeButtonWithPtr(panel, "♥ About",
+                heartBtnX, rowTop, HeartBtnW, BtnBarH,
+                new Color(0f, 0f, 0f, 0f),
+                ToggleHeart);
+            SColor(Style(heartBtn), new Color(1f, 0.55f, 0.70f, 1f));
+            _heartBtnPtr = Ptr(heartBtn);
+
+            string sigLabel = $"SC {ConsolePlugin.Version} by Blaster";
             MakeButtonLink(Wrap(_panelPtr), sigLabel,
                 PanelW - 148f, rowTop, 144f, BtnBarH,
                 () => Application.OpenURL("https://github.com/iBl4St3R/CMS2026-Simple-Console"));
@@ -520,7 +544,7 @@ namespace CMS2026SimpleConsole
             y += 22f;
 
             // Default console key — placeholder TODO
-            CfgKeybindRow(content, "Klawisz toggle konsoli", "toggle_console_key", ref y);
+            CfgKeybindRow(content, "Toggle console key", "toggle_console_key", ref y);
 
             // Lock game input standalone — placeholder TODO (unbound)
             CfgKeybindRow(content, "Lock input (standalone)", "standalone_lock_key", ref y);
@@ -871,6 +895,168 @@ namespace CMS2026SimpleConsole
             RefreshMaxLogLabel();
         }
 
+        private void BuildHeartPanel(object panel)
+        {
+            float vpTop = TitleH + Pad;
+
+            var heart = VE();
+            var s = Style(heart);
+            SPosition(s, "Absolute");
+            SLeft(s, Pad); STop(s, vpTop);
+            SWidth(s, PanelW - Pad * 2); SHeight(s, LogViewH);
+            SBg(s, new Color(0.07f, 0.04f, 0.10f, 1f));
+            SOverflow(s, "Hidden");
+            SOpacity(s, 0f);
+            AddChild(panel, heart);
+            _heartPanelPtr = Ptr(heart);
+            ApplyDisplay(_heartPanelPtr, false);
+
+            var content = VE();
+            var cs = Style(content);
+            SPosition(cs, "Absolute");
+            SLeft(cs, 0f); STop(cs, 0f);
+            SWidth(cs, PanelW - Pad * 2);
+            AddChild(heart, content);
+            _heartContentPtr = Ptr(content);
+
+            float y = 12f;
+
+            // ── Header ───────────────────────────────────────────────────────────────
+            CfgLabel(content, "♥   About & Credits",
+                Pad, y, PanelW - Pad * 4, 26f,
+                new Color(1f, 0.55f, 0.70f, 1f), fontSize: 13);
+            y += 30f;
+
+            CfgDivider(content, y, new Color(0.75f, 0.30f, 0.45f, 0.8f));
+            y += 14f;
+
+            // ── Mod name ─────────────────────────────────────────────────────────────
+            CfgLabel(content, $"CMS2026 Simple Console  v{ConsolePlugin.Version}",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.92f, 0.92f, 1.00f, 1f));
+            y += 26f;
+
+            // ── Author ───────────────────────────────────────────────────────────────
+            CfgLabel(content, "Created by  Blaster",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.82f, 0.85f, 0.92f, 1f));
+            y += 30f;
+
+            // ── GitHub + Nexus  ─────────────────────────────────
+            float btnW = 110f;
+            float btnGap = 8f;
+            float btnsX = Pad * 2;
+
+            MakeButton(content, "GitHub →",
+                btnsX, y, btnW, 24f,
+                new Color(0.13f, 0.13f, 0.26f, 1f),
+                () => Application.OpenURL("https://github.com/iBl4St3R/CMS2026-Simple-Console"));
+
+            MakeButton(content, "Nexus Mods →",
+                btnsX + btnW + btnGap, y, btnW + 10f, 24f,
+                new Color(0.22f, 0.13f, 0.05f, 1f),
+                () => Application.OpenURL(
+                    "https://www.nexusmods.com/carmechanicsimulator2026/mods/2?tab=description"));
+            y += 38f;
+
+            CfgDivider(content, y, new Color(0.55f, 0.22f, 0.35f, 0.5f));
+            y += 14f;
+
+            // ── Thanks ───────────────────────────────────────────────────────────────
+            CfgSectionLabel(content, "SPECIAL THANKS", y);
+            y += 22f;
+
+            CfgLabel(content,
+                "Thanks to the MelonLoader team for making Unity modding accessible.",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.78f, 0.82f, 0.90f, 1f));
+            y += 24f;
+
+            CfgLabel(content,
+                "Thank you Red Dot Games for releasing the demo and giving the community",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.78f, 0.82f, 0.90f, 1f));
+            y += 20f;
+
+            CfgLabel(content,
+                "a chance to explore Car Mechanic Simulator 2026 early.  ♥",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.78f, 0.82f, 0.90f, 1f));
+            y += 34f;
+
+            CfgDivider(content, y, new Color(0.55f, 0.22f, 0.35f, 0.5f));
+            y += 14f;
+
+            // ── Image (horse.png, 480×480) ──────────────────────────────
+            string imgPath = System.IO.Path.Combine(
+                ConsolePlugin.ModDir, "CMS2026SimpleConsole", "horse.png");
+
+            Texture2D horseTex = LoadTextureFromFile(imgPath);
+
+            float imgW = 480f;
+            float imgH = 480f;
+            float imgX = (PanelW - Pad * 2 - imgW) * 0.5f;   // wyśrodkowanie w content
+
+            var imgEl = VE();
+            var imgS = Style(imgEl);
+            SPosition(imgS, "Absolute");
+            SLeft(imgS, imgX);
+            STop(imgS, y);
+            SWidth(imgS, imgW);
+            SHeight(imgS, imgH);
+
+            if (horseTex != null)
+            {
+                SBg(imgS, new Color(0f, 0f, 0f, 0f));   // przezroczyste tło pod teksturą
+                SetBackgroundImage(imgEl, horseTex);
+                AddChild(content, imgEl);
+                y += imgH + 12f;
+            }
+            else
+            {
+                // Placeholder gdy brak pliku
+                SBg(imgS, new Color(0.18f, 0.10f, 0.22f, 1f));
+                AddChild(content, imgEl);
+
+                CfgLabel(content, "[horse.png not found]",
+                    imgX, y + imgH * 0.45f, imgW, 20f,
+                    new Color(0.55f, 0.40f, 0.60f, 1f));
+                y += imgH + 12f;
+            }
+
+            _heartContentH = y;
+        }
+
+        private void ToggleHeart()
+        {
+            _heartAnimTarget = (_heartAnimTarget > 0.5f) ? 0f : 1f;
+            RefreshHeartButtonLabel();
+
+            // Wzajemne wykluczanie — gasim config jeśli jest otwarty
+            if (_heartAnimTarget > 0.5f && _animTarget > 0.5f)
+            {
+                _animTarget = 0f;
+                RefreshConfigButtonLabel();
+            }
+        }
+
+        private void RefreshHeartButtonLabel()
+        {
+            if (_heartBtnPtr == IntPtr.Zero) return;
+            bool showing = _heartAnimTarget > 0.5f;
+            var btn = Activator.CreateInstance(_btnType, new object[] { _heartBtnPtr });
+            _btnType.GetProperty("text").SetValue(btn, showing ? "✕  Close" : "♥ About");
+
+            SColor(Style(btn), showing
+                ? new Color(1f, 1f, 1f, 1f)
+                : new Color(1f, 0.55f, 0.70f, 1f));
+            SBg(Style(btn), showing
+                ? new Color(0.45f, 0.12f, 0.12f, 0.6f)
+                : new Color(0f, 0f, 0f, 0f));
+
+            // Szerokość zostaje 72f — nie ruszamy jej tutaj
+        }
+
         // ── Public API ────────────────────────────────────────────────────────────
         public void SetVisible(bool visible)
         {
@@ -910,6 +1096,8 @@ namespace CMS2026SimpleConsole
             HandleScroll();
             HandleDrag();
             UpdateConfigAnimation();
+            UpdateHeartAnimation();
+            UpdateSharedLogViewport();
         }
 
         public void OnGUI() { }
@@ -986,6 +1174,14 @@ namespace CMS2026SimpleConsole
             _configPanelPtr = IntPtr.Zero;
             _configContentPtr = IntPtr.Zero;
             _textFieldPtr = IntPtr.Zero;
+
+            _heartPanelPtr = IntPtr.Zero;
+            _heartContentPtr = IntPtr.Zero;
+            _heartBtnPtr = IntPtr.Zero;
+            _heartAnimProgress = 0f;
+            _heartAnimTarget = 0f;
+            _heartScrollY = 0f;
+
             BuildPanel(root);
             RebuildAllLines();
         }
@@ -1024,21 +1220,140 @@ namespace CMS2026SimpleConsole
             bool inArea = mx >= vpLeft && mx <= vpRight && muitY >= vpTop && muitY <= vpBottom;
             if (!inArea) return;
 
-            if (_animProgress < 0.5f)
+            if (_heartAnimProgress >= 0.99f)
             {
-                // Log scroll
-                float maxScroll = Mathf.Max(0f, _currentY - LogViewH);
-                _scrollY = Mathf.Clamp(_scrollY - delta * 40f, 0f, maxScroll);
-                ApplyLogScroll();
+                float maxScroll = Mathf.Max(0f, _heartContentH - LogViewH);
+                _heartScrollY = Mathf.Clamp(_heartScrollY - delta * 40f, 0f, maxScroll);
+                ApplyHeartScroll();
             }
-            else
+            else if (_animProgress >= 0.99f)
             {
-                // Config scroll
                 float maxScroll = Mathf.Max(0f, _configContentH - LogViewH);
                 _configScrollY = Mathf.Clamp(_configScrollY - delta * 40f, 0f, maxScroll);
                 ApplyConfigScroll();
             }
+            else
+            {
+                float maxScroll = Mathf.Max(0f, _currentY - LogViewH);
+                _scrollY = Mathf.Clamp(_scrollY - delta * 40f, 0f, maxScroll);
+                ApplyLogScroll();
+            }
         }
+
+        private void ApplyHeartScroll()
+        {
+            if (_heartContentPtr == IntPtr.Zero) return;
+            STop(Style(Wrap(_heartContentPtr)), -_heartScrollY);
+        }
+
+        private Texture2D LoadTextureFromFile(string path)
+        {
+            if (!System.IO.File.Exists(path))
+            {
+                _log($"[Heart] File not found: {path}");
+                return null;
+            }
+            try
+            {
+                byte[] bytes = System.IO.File.ReadAllBytes(path);
+                _log($"[Heart] Loaded {bytes.Length} bytes from {System.IO.Path.GetFileName(path)}");
+
+                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+
+                // Il2Cpp wymaga Il2CppStructArray<byte> zamiast zwykłego byte[]
+                var il2Bytes = new Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppStructArray<byte>(bytes.Length);
+                for (int i = 0; i < bytes.Length; i++)
+                    il2Bytes[i] = bytes[i];
+
+                var icType = AppDomain.CurrentDomain.GetAssemblies()
+                    .SelectMany(a =>
+                    {
+                        try { return a.GetTypes(); }
+                        catch { return Array.Empty<Type>(); }
+                    })
+                    .FirstOrDefault(t => t.FullName == "UnityEngine.ImageConversion");
+
+                if (icType == null)
+                {
+                    _log("[Heart] ImageConversion type not found.");
+                    return null;
+                }
+
+                _log($"[Heart] ImageConversion found in: {icType.Assembly.GetName().Name}");
+
+                // Szukamy przeciążenia które przyjmuje Il2CppStructArray<byte>
+                var loadImg = icType.GetMethods()
+                    .FirstOrDefault(m => m.Name == "LoadImage" && m.GetParameters().Length == 2);
+
+                if (loadImg == null)
+                {
+                    _log("[Heart] LoadImage method not found.");
+                    return null;
+                }
+
+                bool ok = (bool)loadImg.Invoke(null, new object[] { tex, il2Bytes });
+                _log($"[Heart] LoadImage result: {ok}");
+                return ok ? tex : null;
+            }
+            catch (Exception ex)
+            {
+                _log($"[Heart] Texture load error: {ex.GetType().Name}: {ex.Message}");
+                if (ex.InnerException != null)
+                    _log($"[Heart] Inner: {ex.InnerException.Message}");
+                return null;
+            }
+        }
+
+        private void SetBackgroundImage(object visualElement, Texture2D tex)
+        {
+            if (tex == null) return;
+            try
+            {
+                // StyleBackground
+                var bgType = _ueAsm.GetType("UnityEngine.UIElements.Background");
+                var sbgType = _ueAsm.GetType("UnityEngine.UIElements.StyleBackground");
+
+                // Background.FromTexture2D(tex)
+                var il2Tex = new Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppStructArray<byte>(0); // dummy — potrzebujemy wskaźnika
+                                                                                                       // Używamy statycznej metody Background.FromTexture2D
+                var fromTex = bgType.GetMethod("FromTexture2D",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+
+                // Musimy opakować Texture2D w il2cpp wrapper
+                var texType = typeof(Texture2D);
+                var il2TexObj = Activator.CreateInstance(texType, new object[] { tex.Pointer });
+
+                var bgValue = fromTex.Invoke(null, new object[] { il2TexObj });
+
+                // StyleBackground ctor(Background)
+                var sbgCtor = sbgType.GetConstructor(new Type[] { bgType });
+                var sbgValue = sbgCtor.Invoke(new object[] { bgValue });
+
+                var s = Style(visualElement);
+                _sType.GetProperty("backgroundImage").SetValue(s, sbgValue);
+
+                // backgroundSize — cover-like: stretch
+                var bszType = _ueAsm.GetType("UnityEngine.UIElements.BackgroundSize");
+                var sbszType = _ueAsm.GetType("UnityEngine.UIElements.StyleBackgroundSize");
+                var bszKind = _ueAsm.GetType("UnityEngine.UIElements.BackgroundSizeType");
+                if (bszType != null && sbszType != null && bszKind != null)
+                {
+                    var contain = Enum.Parse(bszKind, "Contain");
+                    var bszCtor = bszType.GetConstructor(new Type[] { bszKind });
+                    var bszVal = bszCtor?.Invoke(new object[] { contain });
+                    var sbszCtor = sbszType.GetConstructor(new Type[] { bszType });
+                    var sbszVal = sbszCtor?.Invoke(new object[] { bszVal });
+                    if (sbszVal != null)
+                        _sType.GetProperty("backgroundSize")?.SetValue(s, sbszVal);
+                }
+            }
+            catch (Exception ex)
+            {
+                _log($"[Heart] SetBackgroundImage error: {ex.Message}");
+            }
+        }
+
+
 
         private void HandleDrag()
         {
@@ -1079,6 +1394,13 @@ namespace CMS2026SimpleConsole
         {
             _animTarget = (_animTarget > 0.5f) ? 0f : 1f;
             RefreshConfigButtonLabel();
+
+            // Wzajemne wykluczanie — gasim heart jeśli jest otwarty
+            if (_animTarget > 0.5f && _heartAnimTarget > 0.5f)
+            {
+                _heartAnimTarget = 0f;
+                RefreshHeartButtonLabel();
+            }
         }
 
         private void RefreshConfigButtonLabel()
@@ -1102,44 +1424,73 @@ namespace CMS2026SimpleConsole
 
             float t = SmoothStep(_animProgress);
 
-            // Log viewport
-            if (_logViewportPtr != IntPtr.Zero)
-            {
-                if (_animProgress >= 0.99f)
-                {
-                    ApplyDisplay(_logViewportPtr, false);
-                }
-                else
-                {
-                    ApplyDisplay(_logViewportPtr, true);
-                    var lv = Wrap(_logViewportPtr);
-                    var ls = Style(lv);
-                    SOpacity(ls, 1f - t);
-                    STop(ls, (TitleH + Pad) - t * 22f);
-                }
-            }
-
-            // Config panel
             if (_configPanelPtr != IntPtr.Zero)
             {
                 if (_animProgress <= 0.01f)
                 {
                     ApplyDisplay(_configPanelPtr, false);
-                    _configScrollY = 0f; // reset scroll when closing
+                    _configScrollY = 0f;
                     ApplyConfigScroll();
                 }
                 else
                 {
                     ApplyDisplay(_configPanelPtr, true);
-                    // Refresh toggles when opening
                     if (_animProgress > 0f && _animTarget > 0.5f)
                         RefreshAllConfigToggles();
 
                     var cv = Wrap(_configPanelPtr);
-                    var cvs = Style(cv);
-                    SOpacity(cvs, t);
-                    STop(cvs, (TitleH + Pad) + (1f - t) * 22f);
+                    SOpacity(Style(cv), t);
+                    STop(Style(cv), (TitleH + Pad) + (1f - t) * 22f);
                 }
+            }
+        }
+
+        private void UpdateHeartAnimation()
+        {
+            if (Mathf.Abs(_heartAnimProgress - _heartAnimTarget) < 0.001f) return;
+
+            _heartAnimProgress = Mathf.MoveTowards(
+                _heartAnimProgress, _heartAnimTarget, AnimSpeed * Time.deltaTime);
+
+            float t = SmoothStep(_heartAnimProgress);
+
+            if (_heartPanelPtr != IntPtr.Zero)
+            {
+                if (_heartAnimProgress <= 0.01f)
+                {
+                    ApplyDisplay(_heartPanelPtr, false);
+                    _heartScrollY = 0f;
+                    ApplyHeartScroll();
+                }
+                else
+                {
+                    ApplyDisplay(_heartPanelPtr, true);
+                    var hv = Wrap(_heartPanelPtr);
+                    SOpacity(Style(hv), t);
+                    STop(Style(hv), (TitleH + Pad) + (1f - t) * 22f);
+                }
+            }
+        }
+
+
+        private void UpdateSharedLogViewport()
+        {
+            if (_logViewportPtr == IntPtr.Zero) return;
+
+            // Łączony progress — bierzemy ten który bardziej "zakrywa" logi
+            float combined = Mathf.Max(_animProgress, _heartAnimProgress);
+            float t = SmoothStep(combined);
+
+            if (combined >= 0.99f)
+            {
+                ApplyDisplay(_logViewportPtr, false);
+            }
+            else
+            {
+                ApplyDisplay(_logViewportPtr, true);
+                var lv = Wrap(_logViewportPtr);
+                SOpacity(Style(lv), 1f - t);
+                STop(Style(lv), (TitleH + Pad) - t * 22f);
             }
         }
 
