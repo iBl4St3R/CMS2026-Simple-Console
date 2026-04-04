@@ -162,6 +162,9 @@ namespace CMS2026SimpleConsole
                 SetupFont();
                 BuildUI();
 
+                // symulacja bledu ZOSTAWIC NA PRZYSZLOSC!
+                //throw new Exception("SYMULOWANY BŁĄD UIToolkit");
+
                 _initialized = true;
                 RebuildAllLines();
                 _log("[UIToolkit] Renderer initialized successfully.");
@@ -175,6 +178,14 @@ namespace CMS2026SimpleConsole
                 if (inner != null && inner != ex)
                     _log($"[UIToolkit] Inner: {inner.GetType().Name}: {inner.Message}");
                 _log($"[UIToolkit] Stack: {(inner ?? ex).StackTrace?.Split('\n')[0]}");
+
+                // ── Sprzątamy GameObject jeśli BuildUI zdążył go utworzyć ────────────
+                if (_go != null)
+                {
+                    UnityEngine.Object.Destroy(_go);
+                    _go = null;
+                }
+
                 _initFailed = true;
                 return false;
             }
