@@ -44,6 +44,10 @@ namespace CMS2026SimpleConsole
 
         private int MaxLogLines =>int.TryParse(_config?.GetString("max_log_lines", "2000"), out int v) && v >= 100? v : 2000;
 
+        // ── Base path helper ──────────────────────────────────────────────────────────
+        // ModDir = <GameDir>\Mods\CMS2026SimpleConsole  →  dwa poziomy wyżej = GameDir
+        private string GameDir => Path.GetDirectoryName(Path.GetDirectoryName(ConsolePlugin.ModDir));
+
         private string DumpDir => Path.Combine(ConsolePlugin.ModDir, "CMS2026SimpleConsole");
 
         [HideFromIl2Cpp]
@@ -67,6 +71,7 @@ namespace CMS2026SimpleConsole
                 (_renderer is UIToolkitConsoleRenderer ? "UIToolkit" : "IMGUI"));
             AddLog($"[Config] uitoolkit_priority = {_config.GetBool("uitoolkit_priority", true)}");
 
+
             try
             {
                 AddLog("[REPL] Initializing...");
@@ -78,6 +83,10 @@ namespace CMS2026SimpleConsole
                 AddLog("[REPL] INIT ERROR: " + ex.GetType().Name);
                 AddLog("[REPL] " + ex.Message);
             }
+
+            // Subscribe so registered commands show up in log immediately
+            ConsoleAPI.OnCommandRegistered += (name, desc) => AddLog($"[API] Command registered: '{name}' — {desc}");
+
 
             // Ukryj konsolę na starcie jeśli opcja wyłączona
             if (!(_config?.GetBool("show_at_startup", true) ?? true))
@@ -279,6 +288,24 @@ namespace CMS2026SimpleConsole
             }
             catch (Exception ex) { AddLog("[Config] Failed to open folder: " + ex.Message); }
         }
+
+        private void OpenExplorerFolder(string path, string label)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    Process.Start("explorer.exe", $"\"{path}\""); // ← cudzysłowy
+                    AddLog($"[{label}] {path}");
+                }
+                else
+                {
+                    AddLog($"[{label}] Folder not found: {path}");
+                }
+            }
+            catch (Exception ex) { AddLog($"[{label}] ERR: " + ex.Message); }
+        }
+
 
         private void ApplyConfig()
         {
@@ -487,9 +514,15 @@ namespace CMS2026SimpleConsole
 
                     case "help":
                         AddLog("Commands:");
-                        AddLog("  run <C# code>           – compile and run C# code");
-                        AddLog("  runfile <file.cs>       – run script from mod folder");
+                        AddLog("");
+                        AddLog("  helpadv                 – show advaced commads");
+                        AddLog("  exit                    – quit the game");
+                        AddLog("  save                    – save current game state");
                         AddLog("  resetscene              – reload garage scene");
+                        AddLog("  gamelocation            – open game install folder");
+                        AddLog("  savelocation            – open save files folder");
+                        AddLog("  modslocation            – open Mods folder");
+                        AddLog("  carslocation            – open Cars (StreamingAssets) folder");
                         AddLog("  charspeed <n>           – player walk speed");
                         AddLog("  addmoney [n]            – add money (default 10000)");
                         AddLog("  setmoney <n>            – set exact money amount");
@@ -497,12 +530,29 @@ namespace CMS2026SimpleConsole
                         AddLog("  stealcustomercar <idx>  – take ownership of customer car");
                         AddLog("  fixcar <idx>            – repair all car parts to 100%");
                         AddLog("  removedemowalls         – disable demo map walls");
+                        AddLog("  showgaragecars          – list cars in garage");
+                        AddLog("  showparkingcars         – list cars on parking lot");
+
+                        // ── External commands from other mods ──────────────────
+                        var externalCmds = ConsoleAPI.GetAll().ToList();
+                        if (externalCmds.Count > 0)
+                        {
+                            AddLog("");
+                            AddLog("Mod commands:");
+                            foreach (var (name, desc) in externalCmds)
+                                AddLog($"  {name,-24}– {desc}");
+                        }
+                        break;
+
+                    case "helpadv":
+                        AddLog("Advanced Commands:");
+                        AddLog("");
+                        AddLog("  run <C# code>           – compile and run C# code");
+                        AddLog("  runfile <file.cs>       – run script from mod folder");
                         AddLog("  find <name>             – search GameObjects by name");
                         AddLog("  inspectobj              – inspect object under crosshair");
                         AddLog("  dumpobj                 – copy object hierarchy to clipboard");
                         AddLog("  scenes                  – list loaded scenes");
-                        AddLog("  showgaragecars          – list cars in garage");
-                        AddLog("  showparkingcars         – list cars on parking lot");
                         break;
 
                     case "showgaragecars": CmdShowGarageCars(); break;
@@ -526,8 +576,63 @@ namespace CMS2026SimpleConsole
                         else AddLog("Usage: unstorecarfromparking <index>");
                         break;
 
+                    case "exit":
+                        AddLog("Exiting game...");
+                        Application.Quit();
+                        break;
+
+                    case "save":
+                        try
+                        {
+                            var smInst = GetSaveManagerInstance();
+                            if (smInst != null)
+                            {
+                                smInst.GetType()
+                                      .GetMethod("SaveCurrentProfile")
+                                      ?.Invoke(smInst, null);
+                                AddLog("[Save] Game saved successfully.");
+                            }
+                            else AddLog("[Save] SaveManager not found.");
+                        }
+                        catch (Exception ex) { AddLog("[Save] ERR: " + ex.Message); }
+                        break;
+
+                    case "gamelocation":
+                        OpenExplorerFolder(
+                            Path.GetDirectoryName(Path.GetDirectoryName(ConsolePlugin.ModDir)),
+                            "Game");
+                        break;
+
+                    case "savelocation":
+                        OpenExplorerFolder(
+                            Application.persistentDataPath.Replace('/', '\\'),
+                            "Saves");
+                        break;
+
+                    case "modslocation":
+                        OpenExplorerFolder(
+                            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Mods"), "Mods");
+                        break;
+
+                    case "carslocation":
+                        OpenExplorerFolder(
+                            Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                                "Car Mechanic Simulator 2026 Demo_Data",
+                                "StreamingAssets", "Cars"), "Cars");
+                        break;
+
+
                     default:
-                        AddLog("[?] Unknown command: " + cmd + "  (type 'help')");
+                        // ── Check external commands registered via ConsoleAPI ──────
+                        if (ConsoleAPI.TryExecute(cmd, _cmdParts, out string apiError))
+                        {
+                            if (apiError != null)
+                                AddLog($"[ERR] {cmd}: {apiError}");
+                        }
+                        else
+                        {
+                            AddLog("[?] Unknown command: " + cmd + "  (type 'help')");
+                        }
                         break;
                 }
             }
