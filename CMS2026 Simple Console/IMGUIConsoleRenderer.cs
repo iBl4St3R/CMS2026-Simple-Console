@@ -39,7 +39,7 @@ namespace CMS2026SimpleConsole
 
             _windowRect = GUI.Window(WindowId, _windowRect,
                 (GUI.WindowFunction)DrawWindow,
-                "CMS2026 Simple Console  [F7=hide]  [IMGUI fallback]");
+                "CMS2026 Simple Console [IMGUI fallback]");
 
             GUI.backgroundColor = orig;
         }
