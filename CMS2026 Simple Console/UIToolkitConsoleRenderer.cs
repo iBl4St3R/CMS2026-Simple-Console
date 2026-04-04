@@ -123,6 +123,9 @@ namespace CMS2026SimpleConsole
         private bool _inputLocked = false;
         private IntPtr _lockBtnPtr;
 
+        // ──kopiowanie logow───────────────────────────────────────────────────────
+        private readonly Queue<(IntPtr ptr, float expireAt)> _flashQueue = new();
+
         // ─────────────────────────────────────────────────────────────────────────
         public UIToolkitConsoleRenderer(Action<string> log, List<string> logLines)
         {
@@ -922,6 +925,49 @@ namespace CMS2026SimpleConsole
 
             float y = 12f;
 
+
+            // ── Notice ───────────────────────────────────────────────────────────────────
+            CfgLabel(content, "⚠  NOTICE",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.95f, 0.80f, 0.30f, 1f));
+            y += 24f;
+
+            CfgLabel(content,
+                "Once the full game is available for purchase, this tool will no longer",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.82f, 0.82f, 0.75f, 1f));
+            y += 18f;
+
+            CfgLabel(content,
+                "support the demo in any capacity.",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.82f, 0.82f, 0.75f, 1f));
+            y += 26f;
+
+            CfgLabel(content,
+                "This tool exists for educational purposes — to explore how the game works",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.82f, 0.82f, 0.75f, 1f));
+            y += 18f;
+
+            CfgLabel(content,
+                "and to give the community a welcoming entry point into modding.",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.82f, 0.82f, 0.75f, 1f));
+            y += 26f;
+
+            CfgLabel(content,
+                "The author does not condone piracy in any form.",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.90f, 0.60f, 0.60f, 1f));
+            y += 18f;
+
+            CfgLabel(content,
+                "Hard work deserves respect — please support the developers.",
+                Pad * 2, y, PanelW - Pad * 6, 20f,
+                new Color(0.90f, 0.60f, 0.60f, 1f));
+            y += 34f;
+
             // ── Header ───────────────────────────────────────────────────────────────
             CfgLabel(content, "♥   About & Credits",
                 Pad, y, PanelW - Pad * 4, 26f,
@@ -987,6 +1033,8 @@ namespace CMS2026SimpleConsole
 
             CfgDivider(content, y, new Color(0.55f, 0.22f, 0.35f, 0.5f));
             y += 14f;
+
+            
 
             // ── Image (horse.png, 480×480) ──────────────────────────────
             string imgPath = System.IO.Path.Combine(
@@ -1099,6 +1147,18 @@ namespace CMS2026SimpleConsole
             UpdateConfigAnimation();
             UpdateHeartAnimation();
             UpdateSharedLogViewport();
+            ProcessFlashQueue();
+        }
+
+        private void ProcessFlashQueue()
+        {
+            while (_flashQueue.Count > 0 && _flashQueue.Peek().expireAt <= Time.realtimeSinceStartup)
+            {
+                var (ptr, _) = _flashQueue.Dequeue();
+                if (ptr == IntPtr.Zero) continue;
+                var lbl = Activator.CreateInstance(_lblType, new object[] { ptr });
+                SBg(Style(lbl), new Color(0f, 0f, 0f, 0f));   // przywróć przezroczystość
+            }
         }
 
         public void OnGUI() { }
@@ -1133,9 +1193,57 @@ namespace CMS2026SimpleConsole
             SColor(s, Color.white);
             _lblType.GetProperty("text").SetValue(lbl, text);
 
+            // ── Strip rich text tags for clipboard ───────────────────────────────────
+            string plainText = System.Text.RegularExpressions.Regex.Replace(text, "<.*?>", "");
+            IntPtr lblPtr = Ptr(lbl);
+
+            // ── Click to copy — przez PointerDownEvent ────────────────────────────────
+            try
+            {
+                var trickleType = _ueAsm.GetType("UnityEngine.UIElements.TrickleDown");
+                var pointerDownType = _ueAsm.GetType("UnityEngine.UIElements.PointerDownEvent");
+
+                var regMethod = _veType.GetMethods()
+                    .First(m => m.Name == "RegisterCallback"
+                             && m.IsGenericMethod
+                             && m.GetParameters().Length == 2)
+                    .MakeGenericMethod(pointerDownType);
+
+                var callbackType = _ueAsm.GetType("UnityEngine.UIElements.EventCallback`1")
+                    .MakeGenericType(pointerDownType);
+
+                Action<UnityEngine.UIElements.PointerDownEvent> handler = _ =>
+                {
+                    GUIUtility.systemCopyBuffer = plainText;
+                    FlashLabel(lblPtr);
+                };
+
+                var il2cb = Il2CppInterop.Runtime.DelegateSupport
+                    .ConvertDelegate<UnityEngine.UIElements.EventCallback<UnityEngine.UIElements.PointerDownEvent>>(handler);
+
+                regMethod.Invoke(lbl, new object[]
+                {
+            il2cb,
+            Enum.Parse(trickleType, "TrickleDown")
+                });
+            }
+            catch (Exception ex) { _log($"[ClickCopy] {ex.Message}"); }
+
             var content = Wrap(_contentPtr);
             AddChild(content, lbl);
             _currentY += labelH;
+        }
+
+        private void FlashLabel(IntPtr lblPtr)
+        {
+            if (lblPtr == IntPtr.Zero) return;
+
+            // Zapal zielone tło
+            var lbl = Activator.CreateInstance(_lblType, new object[] { lblPtr });
+            SBg(Style(lbl), new Color(0.15f, 0.45f, 0.15f, 0.7f));
+
+            // Zgaś po 0.4s — przez coroutine-like delayed call
+            _flashQueue.Enqueue((lblPtr, Time.realtimeSinceStartup + 0.4f));
         }
 
         private void RebuildAllLines()
