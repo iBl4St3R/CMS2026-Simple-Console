@@ -525,6 +525,7 @@ namespace CMS2026SimpleConsole
             CfgToggleRow(content, "Show timestamps in log", "show_timestamps", ref y);
             CfgToggleRow(content, "Lock game input when open", "lock_input_when_open", ref y);
             CfgToggleRow(content, "Show console at startup", "show_at_startup", ref y);
+            CfgToggleRow(content, "Capture Unity logs", "capture_unity_logs", ref y);
 
             // Max log lines — placeholder
             CfgMaxLogRow(content, ref y);
@@ -543,10 +544,10 @@ namespace CMS2026SimpleConsole
             CfgSectionLabel(content, "KEYBINDS", y);
             y += 22f;
 
-            // Default console key — placeholder TODO
+            // Default console key
             CfgKeybindRow(content, "Toggle console key", "toggle_console_key", ref y);
 
-            // Lock game input standalone — placeholder TODO (unbound)
+            // Lock game input standalone
             CfgKeybindRow(content, "Lock input (standalone)", "standalone_lock_key", ref y);
 
             CfgDivider(content, y, new Color(0.20f, 0.30f, 0.55f, 0.5f));

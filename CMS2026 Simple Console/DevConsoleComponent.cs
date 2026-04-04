@@ -71,6 +71,10 @@ namespace CMS2026SimpleConsole
                 (_renderer is UIToolkitConsoleRenderer ? "UIToolkit" : "IMGUI"));
             AddLog($"[Config] uitoolkit_priority = {_config.GetBool("uitoolkit_priority", true)}");
 
+            Application.add_logMessageReceived(new Action<string, string, LogType>(OnUnityLog));
+            bool logsOn = _config.GetBool("capture_unity_logs", true);
+            AddLog($"[Console] Unity log capture: {(logsOn ? "ON" : "OFF")}");
+
 
             try
             {
@@ -234,7 +238,37 @@ namespace CMS2026SimpleConsole
             ConsolePlugin.ConsoleComponent = null;
             if (_inputLocked) SetGameInputEnabled(true);
             _renderer?.Destroy();
+
+            Application.remove_logMessageReceived(new Action<string, string, LogType>(OnUnityLog));
         }
+
+        private void OnUnityLog(string condition, string stackTrace, LogType type)
+        {
+            if (!(_config?.GetBool("capture_unity_logs", true) ?? true)) return;
+
+            // Ignoruj własne logi konsoli żeby nie było pętli
+            if (condition.StartsWith("[CMS2026") || condition.StartsWith(">")) return;
+
+            string prefix = type switch
+            {
+                LogType.Error => "[Unity:ERR] ",
+                LogType.Exception => "[Unity:EXC] ",
+                LogType.Warning => "[Unity:WRN] ",
+                LogType.Assert => "[Unity:AST] ",
+                _ => "[Unity:LOG] "
+            };
+
+            AddLog(prefix + condition);
+
+            // Dla wyjątków dopisz pierwszą linię stacktrace
+            if (type == LogType.Exception && !string.IsNullOrEmpty(stackTrace))
+            {
+                string firstLine = stackTrace.Split('\n')[0].Trim();
+                if (!string.IsNullOrEmpty(firstLine))
+                    AddLog("         at " + firstLine);
+            }
+        }
+
 
         // ── Command handler ───────────────────────────────────────────────────────
         private void HandleCommand(string raw)

@@ -31,6 +31,7 @@ using Il2CppInterop.Runtime;
 public static class __Repl
 {{
     public static Action<string> Print;
+    public static Action<string> Log;
 
     public static void Execute()
     {{
@@ -160,9 +161,12 @@ public static class __Repl
             var type = assembly.GetType("__Repl");
 
             // Podpinamy callbacka Print → AddLog w konsoli
-            var printField = type.GetField("Print",
-                BindingFlags.Public | BindingFlags.Static);
+            var printField = type.GetField("Print", BindingFlags.Public | BindingFlags.Static);
             printField?.SetValue(null, (Action<string>)_log);
+
+            var logField = type.GetField("Log", BindingFlags.Public | BindingFlags.Static);
+            logField?.SetValue(null, (Action<string>)_log);   //
+
 
             var method = type.GetMethod("Execute",
                 BindingFlags.Public | BindingFlags.Static);
