@@ -53,8 +53,8 @@ public static class __Repl
             string melonDir = Path.Combine(gameDir, "MelonLoader");
             string interopDir = Path.Combine(melonDir, "Il2CppAssemblies");
             string net6Dir = Path.Combine(melonDir, "net6");
-            // ZMIANA: Roslyn siedzi w UserLibs, nie w folderze moda
             string userLibsDir = Path.Combine(gameDir, "UserLibs");
+            string modsDir = Path.Combine(gameDir, "Mods");   // ← NOWE
 
             _log($"[REPL] MelonDir:   {melonDir}");
             _log($"[REPL] InteropDir: {interopDir}");
@@ -74,12 +74,11 @@ public static class __Repl
         Path.Combine(interopDir, "Il2CppFusion.Addons.SimpleKCC.dll"),
         Path.Combine(interopDir, "UnityEngine.UIElementsModule.dll"),
         Path.Combine(interopDir, "UnityEngine.TextRenderingModule.dll"),
-        Path.Combine(net6Dir, "MelonLoader.dll"),
-        Path.Combine(net6Dir, "Il2CppInterop.Runtime.dll"),
-        Path.Combine(net6Dir, "Il2CppInterop.Common.dll"),
-        // ZMIANA: UserLibs zamiast folderu moda
-        Path.Combine(userLibsDir, "Microsoft.CodeAnalysis.dll"),
-        Path.Combine(userLibsDir, "Microsoft.CodeAnalysis.CSharp.dll"),
+        Path.Combine(net6Dir,    "MelonLoader.dll"),
+        Path.Combine(net6Dir,    "Il2CppInterop.Runtime.dll"),
+        Path.Combine(net6Dir,    "Il2CppInterop.Common.dll"),
+        Path.Combine(userLibsDir,"Microsoft.CodeAnalysis.dll"),
+        Path.Combine(userLibsDir,"Microsoft.CodeAnalysis.CSharp.dll"),
     };
 
             int ok = 0, skip = 0;
@@ -103,17 +102,50 @@ public static class __Repl
                 }
             }
 
-            // Dodatkowo: standardowe .NET assemblies z runtime
+            // ── Mods folder — ładuj każdy DLL który jest już załadowany w AppDomain ──
+            // Sprawdzamy czy assembly z Mods jest faktycznie załadowane zanim dodamy
+            // referencję — konsola działa bez frameworka, framework działa bez konsoli
+            var loadedNames = new HashSet<string>(
+                AppDomain.CurrentDomain.GetAssemblies()
+                    .Select(a => a.GetName().Name),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (Directory.Exists(modsDir))
+            {
+                foreach (string dllPath in Directory.GetFiles(modsDir, "*.dll"))
+                {
+                    string asmName = Path.GetFileNameWithoutExtension(dllPath);
+
+                    // Pomiń siebie samego
+                    if (asmName == "CMS2026SimpleConsole") continue;
+
+                    // Dodaj tylko jeśli assembly jest faktycznie załadowane w procesie
+                    if (!loadedNames.Contains(asmName)) continue;
+
+                    try
+                    {
+                        using var stream = File.OpenRead(dllPath);
+                        using var peReader = new System.Reflection.PortableExecutable
+                                                 .PEReader(stream);
+                        if (!peReader.HasMetadata) continue;
+
+                        _references.Add(MetadataReference.CreateFromFile(dllPath));
+                        _log($"[REPL] Mod ref added: {asmName}");
+                        ok++;
+                    }
+                    catch { skip++; }
+                }
+            }
+
+            // ── .NET runtime assemblies ──────────────────────────────────────────
             string runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location);
             foreach (string path in Directory.GetFiles(runtimeDir, "*.dll"))
             {
                 try
                 {
-                    // Sprawdź czy to managed assembly zanim dodasz do referencji
                     using var stream = File.OpenRead(path);
                     using var peReader = new System.Reflection.PortableExecutable.PEReader(stream);
-                    if (!peReader.HasMetadata) continue; // natywny DLL — pomiń
-
+                    if (!peReader.HasMetadata) continue;
                     _references.Add(MetadataReference.CreateFromFile(path));
                     ok++;
                 }
