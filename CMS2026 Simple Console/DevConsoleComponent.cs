@@ -42,6 +42,11 @@ namespace CMS2026SimpleConsole
         private readonly List<string> _logLines = new List<string>();
         private string[] _cmdParts;
 
+        // ── History ───────────────────────────────────────────────────────────────
+        private readonly List<string> _history = new List<string>();
+        private int _historyIndex = -1;
+        private const int MaxHistory = 200;
+
         private int MaxLogLines =>int.TryParse(_config?.GetString("max_log_lines", "2000"), out int v) && v >= 100? v : 2000;
 
         // ── Base path helper ──────────────────────────────────────────────────────────
@@ -167,6 +172,31 @@ namespace CMS2026SimpleConsole
                     AddLog($"[Input] Standalone lock: {(_standaloneLockActive ? "ON" : "OFF")}");
                 }
             }
+
+
+            // ── Historia komend — Up/Down ─────────────────────────────────────────
+            if (_renderer.IsVisible && _history.Count > 0)
+            {
+                if (Input.GetKeyDown(KeyCode.UpArrow))
+                {
+                    _historyIndex = Mathf.Clamp(_historyIndex + 1, 0, _history.Count - 1);
+                    _renderer.CommandInput = _history[_history.Count - 1 - _historyIndex];
+                }
+                else if (Input.GetKeyDown(KeyCode.DownArrow))
+                {
+                    _historyIndex--;
+                    if (_historyIndex < 0)
+                    {
+                        _historyIndex = -1;
+                        _renderer.CommandInput = "";
+                    }
+                    else
+                    {
+                        _renderer.CommandInput = _history[_history.Count - 1 - _historyIndex];
+                    }
+                }
+            }
+
 
             // ── Toggle console ────────────────────────────────────────────────
             KeyCode toggleKey = ParseKey(_config?.GetString("toggle_console_key", "F7"), KeyCode.F7);
@@ -480,6 +510,15 @@ namespace CMS2026SimpleConsole
         private void ExecuteCommand(string raw)
         {
             AddLog("> " + raw);
+
+            // Zapisz do historii — nie duplikuj ostatniego wpisu
+            if (_history.Count == 0 || _history[_history.Count - 1] != raw)
+            {
+                _history.Add(raw);
+                if (_history.Count > MaxHistory)
+                    _history.RemoveAt(0);
+            }
+            _historyIndex = -1;
 
             _cmdParts = raw.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             if (_cmdParts.Length == 0) return;

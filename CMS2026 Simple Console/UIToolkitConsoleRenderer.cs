@@ -119,7 +119,21 @@ namespace CMS2026SimpleConsole
 
         // ── Interface ─────────────────────────────────────────────────────────────
         public bool IsVisible => _visible;
-        public string CommandInput { get => _commandInput; set => _commandInput = value; }
+        public string CommandInput
+        {
+            get => _commandInput;
+            set
+            {
+                _commandInput = value;
+                if (_textFieldPtr == IntPtr.Zero) return;
+                try
+                {
+                    var tf = Activator.CreateInstance(_tfType, new object[] { _textFieldPtr });
+                    _tfType.GetProperty("value").SetValue(tf, value ?? "");
+                }
+                catch { }
+            }
+        }
         public event Action<string> OnCommandSubmitted;
 
         private bool _inputLocked = false;
