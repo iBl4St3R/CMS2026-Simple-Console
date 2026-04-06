@@ -347,8 +347,10 @@ namespace CMS2026SimpleConsole
                 while (_logLines.Count > maxLines)
                     _logLines.RemoveAt(0);
 
-                //if (_renderer is UIToolkitConsoleRenderer uitR2)
-                //    uitR2.RebuildIfNeeded(_logLines.Count);   // opcjonalne
+                // Odśwież renderer żeby pokazał przycięte logi
+                _renderer.ClearLines();
+                foreach (var line in _logLines)
+                    _renderer.AddLine(line);
             }
             AddLog("[Config] Settings applied.");
         }

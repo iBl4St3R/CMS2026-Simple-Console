@@ -43,7 +43,7 @@ namespace CMS2026SimpleConsole
         private const float BtnBarH = 26f;
         private const float LineH = 22f;
         private const float Pad = 4f;
-        private const int MaxLabels = 300;
+        private int MaxLabels => Mathf.Clamp(int.TryParse(ConsolePlugin.Config?.GetString("max_display_lines", "300"), out int v) ? v : 300,100, 600);
 
         private float _panelX = 20f;
         private float _panelY = 20f;
@@ -86,6 +86,8 @@ namespace CMS2026SimpleConsole
 
         private readonly Dictionary<string, IntPtr> _keybindLabelPtrs = new Dictionary<string, IntPtr>();
         private IntPtr _maxLogValuePtr = IntPtr.Zero;
+        private IntPtr _maxDisplayValuePtr = IntPtr.Zero;
+
         private float _pendingPanelWidth = 0f;   
         private float _pendingHeight = 0f;   
         private IntPtr _pendingWidthLabelPtr = IntPtr.Zero;  
@@ -554,8 +556,9 @@ namespace CMS2026SimpleConsole
             CfgToggleRow(content, "Show console at startup", "show_at_startup", ref y);
             CfgToggleRow(content, "Capture Unity logs", "capture_unity_logs", ref y);
 
-            // Max log lines — placeholder
+            // Max log lines
             CfgMaxLogRow(content, ref y);
+            CfgMaxDisplayRow(content, ref y);   
 
             // Panel size (UIToolkit only)
             CfgPanelSizeRow(content, "Panel width", "panel_width", 560f, 1400f, ref y);
@@ -767,7 +770,46 @@ namespace CMS2026SimpleConsole
             y += 56f; // więcej miejsca bo Set jest pod spodem
         }
 
+        private void CfgMaxDisplayRow(object parent, ref float y)
+        {
+            string cur = ConsolePlugin.Config?.GetString("max_display_lines", "300") ?? "300";
 
+            var lbl = MakeButtonWithPtr(parent, cur,
+                PanelW - Pad * 2 - 130f, y, 62f, 24f,
+                new Color(0.10f, 0.10f, 0.16f, 1f),
+                () => { });
+            _maxDisplayValuePtr = Ptr(lbl);
+
+            MakeButton(parent, "−",
+                PanelW - Pad * 2 - 64f, y, 28f, 24f,
+                new Color(0.38f, 0.18f, 0.18f, 1f),
+                () => StepMaxDisplayLines(-50));
+
+            MakeButton(parent, "+",
+                PanelW - Pad * 2 - 32f, y, 28f, 24f,
+                new Color(0.18f, 0.38f, 0.18f, 1f),
+                () => StepMaxDisplayLines(+50));
+
+            CfgLabel(parent, "Max lines in panel  (100–600, needs reload)",
+                Pad * 2, y + 3f, PanelW - 180f, 20f,
+                new Color(0.82f, 0.85f, 0.92f, 1f));
+            y += 34f;
+        }
+
+        private void StepMaxDisplayLines(int delta)
+        {
+            if (ConsolePlugin.Config == null) return;
+            int cur = int.TryParse(
+                ConsolePlugin.Config.GetString("max_display_lines", "300"), out int v) ? v : 300;
+            int next = Mathf.Clamp(cur + delta, 100, 600);
+            ConsolePlugin.Config.Set("max_display_lines", next.ToString());
+            if (_maxDisplayValuePtr != IntPtr.Zero)
+            {
+                var b = Activator.CreateInstance(_btnType, new object[] { _maxDisplayValuePtr });
+                _btnType.GetProperty("text").SetValue(b, next.ToString());
+            }
+            OnCommandSubmitted?.Invoke("__applyconfig");
+        }
 
         private void StepMaxLogLines(int delta)
         {
@@ -783,6 +825,7 @@ namespace CMS2026SimpleConsole
             }
             OnCommandSubmitted?.Invoke("__applyconfig");
         }
+
 
 
         //c# nie pozwala na ref do właściwości warunkowej w lambdzi
