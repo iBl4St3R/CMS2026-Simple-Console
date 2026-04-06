@@ -404,24 +404,58 @@ namespace CMS2026SimpleConsole
         private void RegisterSubmitCallback(IntPtr ptr)
         {
             var trickleType = _ueAsm.GetType("UnityEngine.UIElements.TrickleDown");
+            var tf = Activator.CreateInstance(_tfType, new object[] { ptr });
+
+            // ── ChangeEvent — sync _commandInput na każde wciśnięcie klawisza ──────
+            var changeRegMethod = _veType.GetMethods()
+                .First(m => m.Name == "RegisterCallback"
+                         && m.IsGenericMethod
+                         && m.GetParameters().Length == 2)
+                .MakeGenericMethod(typeof(UnityEngine.UIElements.ChangeEvent<string>));
+
+            Action<UnityEngine.UIElements.ChangeEvent<string>> changeHandler = (evt) =>
+            {
+                _commandInput = evt.newValue ?? "";
+                // Poinformuj DevConsoleComponent że tekst się zmienił — on sam oceni czy resetować AC
+                OnCommandSubmitted?.Invoke("__resetac");
+            };
+
+            var il2cChange = Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate < UnityEngine.UIElements.EventCallback<UnityEngine.UIElements.ChangeEvent<string> >> (changeHandler);
+
+            changeRegMethod.Invoke(tf, new object[]
+            {
+        il2cChange,
+        Enum.Parse(trickleType, "NoTrickleDown")
+            });
+
+            // ── KeyDownEvent — Tab + Enter ────────────────────────────────────────
             var regMethod = _veType.GetMethods()
                 .First(m => m.Name == "RegisterCallback"
                          && m.IsGenericMethod
                          && m.GetParameters().Length == 2)
                 .MakeGenericMethod(typeof(UnityEngine.UIElements.KeyDownEvent));
 
-            var tf = Activator.CreateInstance(_tfType, new object[] { ptr });
-
-            System.Action<UnityEngine.UIElements.KeyDownEvent> handler = (evt) =>
+            Action<UnityEngine.UIElements.KeyDownEvent> handler = (evt) =>
             {
                 if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
+                {
                     SubmitTextField();
+                }
+                else if (evt.keyCode == KeyCode.Tab)
+                {
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    OnCommandSubmitted?.Invoke("__tab");
+                }
             };
 
-            var il2cb = Il2CppInterop.Runtime.DelegateSupport
-                .ConvertDelegate<UnityEngine.UIElements.EventCallback<UnityEngine.UIElements.KeyDownEvent>>(handler);
+            var il2cb = Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate < UnityEngine.UIElements.EventCallback<UnityEngine.UIElements.KeyDownEvent >> (handler);
 
-            regMethod.Invoke(tf, new object[] { il2cb, Enum.Parse(trickleType, "TrickleDown") });
+            regMethod.Invoke(tf, new object[]
+            {
+        il2cb,
+        Enum.Parse(trickleType, "TrickleDown")
+            });
         }
 
         private void SubmitTextField()

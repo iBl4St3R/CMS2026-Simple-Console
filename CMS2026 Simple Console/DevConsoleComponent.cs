@@ -47,7 +47,26 @@ namespace CMS2026SimpleConsole
         private int _historyIndex = -1;
         private const int MaxHistory = 200;
 
-        private int MaxLogLines =>int.TryParse(_config?.GetString("max_log_lines", "2000"), out int v) && v >= 100? v : 2000;
+        // ── Autocomplete ──────────────────────────────────────────────────────────
+        private static readonly string[] _builtinCommands = new[]
+        {
+    "help", "helpadv", "exit", "save", "resetscene",
+    "gamelocation", "savelocation", "modslocation", "carslocation",
+    "charspeed", "addmoney", "setmoney", "addexp",
+    "stealcustomercar", "fixcar", "removedemowalls",
+    "showgaragecars", "showparkingcars",
+    "storecarinparking", "unstorecarfromparking",
+    "find", "inspectobj", "dumpobj", "scenes",
+    "run", "eval", "runfile"
+};
+
+        // ── Autocomplete cycling ───────────────────────────────────────────────
+        private List<string> _acMatches = new List<string>();
+        private int _acIndex = -1;
+        private string _acPrefix = null;   // null = brak aktywnej sesji AC
+        private bool _suppressResetAc = false;
+
+        private int MaxLogLines => int.TryParse(_config?.GetString("max_log_lines", "2000"), out int v) && v >= 100 ? v : 2000;
 
         // ── Base path helper ──────────────────────────────────────────────────────────
         // ModDir = <GameDir>\Mods\CMS2026SimpleConsole  →  dwa poziomy wyżej = GameDir
@@ -197,6 +216,14 @@ namespace CMS2026SimpleConsole
                 }
             }
 
+            // ── Autocomplete — Tab (tylko IMGUI, UIToolkit wysyła __tab przez event) ──
+            if (_renderer is IMGUIConsoleRenderer && _renderer.IsVisible && Input.GetKeyDown(KeyCode.Tab))
+            {
+                HandleAutocomplete();
+            }
+
+
+
 
             // ── Toggle console ────────────────────────────────────────────────
             KeyCode toggleKey = ParseKey(_config?.GetString("toggle_console_key", "F7"), KeyCode.F7);
@@ -300,6 +327,10 @@ namespace CMS2026SimpleConsole
         // ── Command handler ───────────────────────────────────────────────────────
         private void HandleCommand(string raw)
         {
+            if (raw == "__resetac") { ResetAc(); return; }
+
+
+
             if (string.IsNullOrWhiteSpace(raw)) return;
 
             if (raw == "__clear") { _logLines.Clear(); _renderer.ClearLines(); return; }
@@ -308,6 +339,7 @@ namespace CMS2026SimpleConsole
             if (raw == "__openconfig") { OpenConfigFile(); return; }
             if (raw == "__openfolder") { OpenModFolder(); return; }
             if (raw == "__applyconfig") { ApplyConfig(); return; }
+            if (raw == "__tab") { HandleAutocomplete(); return; }
 
             if (raw.StartsWith("__startbind:"))
             {
@@ -336,6 +368,80 @@ namespace CMS2026SimpleConsole
                 AddLog($"[Config] Opened folder: {Path.GetDirectoryName(cfgPath)}");
             }
             catch (Exception ex) { AddLog("[Config] Failed to open folder: " + ex.Message); }
+        }
+
+        private void HandleAutocomplete()
+        {
+            string current = _renderer.CommandInput?.Trim() ?? "";
+            if (current.Length == 0)
+            {
+                ResetAc();
+                return;
+            }
+
+            bool isCycling = _acPrefix != null && _acMatches.Contains(current);
+
+            if (!isCycling)
+            {
+                _acPrefix = current;
+                _acMatches = GetAllAutocompleteMatches(_acPrefix);
+                _acIndex = -1;
+            }
+
+            if (_acMatches.Count == 0) return;
+
+            _acIndex = (_acIndex + 1) % _acMatches.Count;
+
+            _suppressResetAc = true;                          // ← zablokuj reset
+            _renderer.CommandInput = _acMatches[_acIndex];
+            _suppressResetAc = false;                         // ← odblokuj
+
+            if (_acMatches.Count > 1)
+                ShowAcHint();
+        }
+
+        private void ResetAc()
+        {
+            if (_suppressResetAc) return;                     // ← ignoruj jeśli my ustawiamy
+
+            string current = _renderer.CommandInput?.Trim() ?? "";
+            if (_acPrefix == null) return;
+            if (_acMatches.Contains(current)) return;
+
+            _acMatches.Clear();
+            _acIndex = -1;
+            _acPrefix = null;
+        }
+
+        private void ShowAcHint()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("<color=#4a7fa5>[Tab]</color>  ");
+            for (int i = 0; i < _acMatches.Count; i++)
+            {
+                bool active = i == _acIndex;
+                sb.Append(active
+                    ? $"<color=#7ec8a0><b>{_acMatches[i]}</b></color>"
+                    : $"<color=#607870>{_acMatches[i]}</color>");
+                if (i < _acMatches.Count - 1) sb.Append("  ");
+            }
+            AddLog(sb.ToString());
+        }
+
+        private List<string> GetAllAutocompleteMatches(string prefix)
+        {
+            prefix = prefix.ToLowerInvariant();
+            var results = new List<string>();
+
+            foreach (string cmd in _builtinCommands)
+                if (cmd.StartsWith(prefix) && cmd != prefix)
+                    results.Add(cmd);
+
+            foreach (var (name, _) in ConsoleAPI.GetAll())
+                if (name.StartsWith(prefix) && name != prefix)
+                    results.Add(name);
+
+            return results;
         }
 
         private void OpenModFolder()
@@ -509,6 +615,7 @@ namespace CMS2026SimpleConsole
         // ── Command interpreter ───────────────────────────────────────────────────
         private void ExecuteCommand(string raw)
         {
+            HardResetAc();
             AddLog("> " + raw);
 
             // Zapisz do historii — nie duplikuj ostatniego wpisu
@@ -900,6 +1007,26 @@ namespace CMS2026SimpleConsole
             return Activator.CreateInstance(glType, new object[] { gls[0].Pointer });
         }
 
+
+
+        //TODO rozszerzyc do api/mods
+        private string GetAutocompleteMatch(string prefix)
+        {
+            prefix = prefix.ToLowerInvariant();
+
+            // Szukaj najpierw w builtinach
+            foreach (string cmd in _builtinCommands)
+                if (cmd.StartsWith(prefix) && cmd != prefix)
+                    return cmd;
+
+            // Potem w komendach z modów
+            foreach (var (name, _) in ConsoleAPI.GetAll())
+                if (name.StartsWith(prefix) && name != prefix)
+                    return name;
+
+            return null;
+        }
+
         private void CmdShowGarageCars()
         {
             try
@@ -1023,6 +1150,13 @@ namespace CMS2026SimpleConsole
                 AddLog($"[Parking] Cars on parking: {filled}");
             }
             catch (Exception ex) { AddLog("[Parking] ERR: " + ex.Message); }
+        }
+
+        private void HardResetAc()
+        {
+            _acMatches.Clear();
+            _acIndex = -1;
+            _acPrefix = null;
         }
 
         private void CmdFixCar(int garageIndex)
