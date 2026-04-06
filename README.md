@@ -25,8 +25,6 @@ The new **Mods Panel** automatically detects and lists installed mods. It pulls 
 * **Smart Autocomplete:** Press **Tab** to cycle through matching commands based on your current input.
 * **Command History:** Use **Up/Down arrows** to navigate through the last 200 executed commands.
 
-### 🔍 Deep Inspection
-Search for any active GameObject with `find` or use `inspectobj` to see the internal state of whatever you are looking at in-game.
 
 ---
 
