@@ -1,40 +1,50 @@
 # CMS 2026 Simple Console
-**Developer console and C# REPL for Car Mechanic Simulator 2026**
-![version](https://img.shields.io/badge/version-1.0.3-blue)
+**Enhancing navigation, debugging, and mod interoperability for Car Mechanic Simulator 2026**
+![version](https://img.shields.io/badge/version-1.2.0-blue)
 ![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.2-green)
 ---
 
 ## 📖 Overview
 <img src="preview.png" align="right" width="400" alt="Console Preview">
-**CMS 2026 Simple Console** is a developer-oriented tool created for modders and advanced users.  
-It provides a powerful and transparent way to inspect, debug, and interact with the game built on the Unity 6 engine.
+**CMS 2026 Simple Console** is a lightweight yet powerful utility designed to bridge the gap between players, modders, and the game's internal systems. 
 
-This tool allows you to explore internal systems, experiment with gameplay mechanics, and accelerate development workflows — without patching game files directly.
+Built for the Unity 6 engine, it focuses on:
+* **Navigation & Control:** Quickly move through scenes, manage cars, and bypass demo restrictions.
+* **Mod Ecosystem:** A centralized **Mods Panel** to track installed modifications and their metadata.
+* **Debugging & Inspection:** Real-time object inspection and data dumping to accelerate mod development.
+* **Extensibility:** Public API allowing other mods to register custom commands and information.
+
+---
+
+## ✨ Key Features
+
+### 🛠 Mod Management
+The new **Mods Panel** automatically detects and lists installed mods. It pulls information like version, author, and documentation links directly from the assemblies.
+
+### ⌨️ Advanced Input
+* **Smart Autocomplete:** Press **Tab** to cycle through matching commands based on your current input.
+* **Command History:** Use **Up/Down arrows** to navigate through the last 200 executed commands.
+
+### 🔍 Deep Inspection
+Search for any active GameObject with `find` or use `inspectobj` to see the internal state of whatever you are looking at in-game.
 
 ---
 
-## 🚀 Core Feature — C# REPL Runtime
-The main feature of this mod is the `run` command, which enables real-time execution of C# code during gameplay.
+## 🚀 Optional Feature: C# REPL Runtime
+For advanced users and developers, the console supports an optional **C# REPL** (the `run` command). This allows for real-time code execution to modify the game state on the fly.
 
-### Features
-- **Live scripting** – Modify game state instantly
-- **Full Unity access** – Use `UnityEngine` and `Il2CppCMS` namespaces
-- **Runtime inspection** – Quickly locate and analyze objects
-
-### Example
-```csharp
-run var car = UnityEngine.Object.FindObjectOfType<Il2CppCMS.Core.Car.CarLoaderOnCar>();
-if (car != null)
-    Print("Car found: " + car.name);
-else
-    Print("No car found nearby.");
-```
+**Note:** To keep the core mod lightweight, REPL requires manual installation of dependency libraries in the `UserLibs` folder.
 
 ---
+
 ## 🖥️ Console Commands
-Press **F7** to toggle the console and enter commands:
+Press **F7** to toggle the console:
 
-* `run <C# code>` – Execute C# code at runtime
+* **Tab** – Cycle through command suggestions
+* **Up/Down Arrows** – Browse command history
+
+* `run <C# code>` – Execute code (Requires Optional REPL Setup)
+* `runfile script.cs` – Execute code from file (Requires Optional REPL Setup)
 * `help` – Display list of available commands
 * `find <name>` – Search for game objects by name
 * `inspectobj` – Show detailed info about the object under the crosshair
@@ -51,44 +61,36 @@ Press **F7** to toggle the console and enter commands:
 * `showparkingcars` – List cars on the parking lot
 * `removedemowalls` – Disable demo map restrictions
 
+
 ---
 
-## 📦 Installation
+## 📦 Installation & Update
 
-### 1. Pre-requisites
-* Ensure you have **MelonLoader v0.7.2** installed for *Car Mechanic Simulator 2026 Demo*.
+### 1. Standard Installation
+* Install **MelonLoader v0.7.2**.
+* Download `CMS2026SimpleConsole.dll` from **[Releases](https://github.com/iBl4St3R/CMS2026-Simple-Console/releases)**.
+* Place the file in your game's **`Mods`** folder.
 
-### 2. Download & Extract
-* Download the **[latest CMS 2026 Simple Console version](https://github.com/iBl4St3R/CMS2026-Simple-Console/releases)** from the Releases section.
-* Extract the contents of the downloaded ZIP archive.
+### 2. Enabling REPL Support (Optional Add-on)
+* Download the **[Optional REPL Dependencies](https://github.com/iBl4St3R/CMS2026-Simple-Console/releases/tag/Optional_REPL_Dependencies)**.
+* Extract all DLLs to the game's **`UserLibs`** folder.
+* Enable REPL in the console's in-game settings.
 
-### 3. Copy Files
-* Move the `CMS2026SimpleConsole.dll` from the **Mods** folder in the ZIP to your game's **`Mods`** directory.
-* Move all DLL files from the **UserLibs** folder in the ZIP to your game's **`UserLibs`** directory.
+### 3. Clean Update (from v1.1.x or older)
+To avoid conflicts with the new modular structure, please:
+1. Delete `CMS2026SimpleConsole.dll` and the `CMS2026SimpleConsole` folder from **`Mods`**.
+2. **If NOT using REPL**, delete these files from **`UserLibs`**: `Microsoft.CodeAnalysis.CSharp.dll`, `Microsoft.CodeAnalysis.dll`, `System.Collections.Immutable.dll`, `System.Reflection.Metadata.dll`, `System.Runtime.CompilerServices.Unsafe.dll`.
+3. Install the new version as usual.
 
-
-**Default game path:**
-```text
-SteamLibrary\steamapps\common\Car Mechanic Simulator 2026 Demo\
-```
 ---
+
 ## ⚠️ Known Issues
-
-### UI Toolkit not loading (Error 0x800711C7)
-You might encounter a `System.IO.FileLoadException` in the MelonLoader console regarding `UnityEngine.TextRenderingModule.dll`. This causes the UI Toolkit interface of this mod to fail, forcing a fallback to the simpler IMGUI renderer.
-
-**Cause:**
-This is **not a bug in the mod**. It is caused by a Windows 11 security feature called **Smart App Control**, which blocks unsigned DLL files generated dynamically by MelonLoader's `Il2CppAssemblyGenerator`.
-
-**Solution:**
-1. Open the **Start Menu** and search for **Smart App Control**.
-2. Set it to **Off** (Note: Windows may require a certain state to change this, or it might be in 'Evaluation' mode).
+**UI Toolkit not loading:** Windows **Smart App Control** may block MelonLoader's generated files.  
+**Solution:** Set Smart App Control to **Off** in Windows Security.
 
 ---
-## 📌 Notes
-* This tool is intended for development and debugging purposes
-* Use responsibly when modifying gameplay
 
----
 ## 📄 License
-   For modding and educational use only. Not affiliated with Red Dot Games.
+For modding and educational use only. Not affiliated with Red Dot Games.
+
+
