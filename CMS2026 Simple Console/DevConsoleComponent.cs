@@ -89,6 +89,14 @@ namespace CMS2026SimpleConsole
 
             InitRenderer();
 
+
+            // Subskrybuj panel Mods przed załadowaniem fallbacków
+            if (_renderer is UIToolkitConsoleRenderer uitR2)
+                ModRegistry.OnModRegistered += _ => uitR2.RebuildModsPanel();
+
+            // Załaduj znane mody (fallback) — po chwili, żeby zewnętrzne mody zdążyły się dopisać
+            MelonLoader.MelonCoroutines.Start(LoadFallbacksDelayed());
+
             AddLog("[CMS2026SimpleConsole] Awake OK  F7=toggle");
             AddLog("[CMS2026SimpleConsole] Unity " + Application.unityVersion);
             AddLog("[CMS2026SimpleConsole] Renderer: " +
@@ -250,6 +258,14 @@ namespace CMS2026SimpleConsole
                 if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
                 if (!Cursor.visible) Cursor.visible = true;
             }
+        }
+
+        private System.Collections.IEnumerator LoadFallbacksDelayed()
+        {
+            // Czekamy jedną klatkę — zewnętrzne mody rejestrują się w OnSceneWasInitialized
+            yield return null;
+            yield return null;
+            ModRegistry.LoadFallbacks();
         }
 
         private void OnGUI()

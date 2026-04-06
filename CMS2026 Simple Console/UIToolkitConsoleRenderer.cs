@@ -35,7 +35,7 @@ namespace CMS2026SimpleConsole
         private object _fontDef;
 
         // ── Layout ──────────────────────────────────────────────────────────────
-        private float PanelW => ConsolePlugin.Config != null && float.TryParse(ConsolePlugin.Config.GetString("panel_width", "660"), out float _pw) ? Mathf.Clamp(_pw, 560f, 1400f) : 660f;
+        private float PanelW => ConsolePlugin.Config != null && float.TryParse(ConsolePlugin.Config.GetString("panel_width", "660"), out float _pw) ? Mathf.Clamp(_pw, 660f, 1400f) : 660f;
         private float PanelH => ConsolePlugin.Config != null&& float.TryParse(ConsolePlugin.Config.GetString("panel_height", "500"), out float _ph)? Mathf.Clamp(_ph, 300f, 1000f) : 500f;
         private const float TitleH = 24f;
         private float LogViewH => PanelH - TitleH - InputH - BtnBarH - Pad * 5f;
@@ -79,6 +79,14 @@ namespace CMS2026SimpleConsole
         private float _heartContentH = 0f;
         private float _heartScrollY = 0f;
 
+        // ── Mods panel ───────────────────────────────────────────────────────────────
+        private IntPtr _modsPanelPtr;
+        private IntPtr _modsContentPtr;
+        private IntPtr _modsBtnPtr;
+        private float _modsAnimProgress = 0f;
+        private float _modsAnimTarget = 0f;
+        private float _modsContentH = 0f;
+        private float _modsScrollY = 0f;
 
 
         // Config toggle button pointers keyed by config key
@@ -310,6 +318,7 @@ namespace CMS2026SimpleConsole
             BuildLogArea(panel);
             BuildConfigPanel(panel);
             BuildHeartPanel(panel);
+            BuildModsPanel(panel);
             BuildInputRow(panel);
             BuildButtonRow(panel);
             BuildSignature(panel);
@@ -490,12 +499,17 @@ namespace CMS2026SimpleConsole
                 new Color(0.18f, 0.28f, 0.5f, 1f),
                 () => OnCommandSubmitted?.Invoke("__copylog"));
 
-            // → IMGUI moved to config panel. "⚙ Config" takes its old slot.
             var cfgBtn = MakeButtonWithPtr(panel, "🔧  Config",
-                Pad + 262f, rowTop, 92f, BtnBarH,
+                Pad + 262f, rowTop, 84f, BtnBarH,           // ← 92f → 84f
                 new Color(0.15f, 0.38f, 0.28f, 1f),
                 ToggleConfig);
             _configBtnPtr = Ptr(cfgBtn);
+
+            var modsBtn = MakeButtonWithPtr(panel, "🧩  Mods",  // ← NOWY
+                Pad + 350f, rowTop, 80f, BtnBarH,
+                new Color(0.28f, 0.22f, 0.45f, 1f),
+                ToggleMods);
+            _modsBtnPtr = Ptr(modsBtn);
         }
 
         private void BuildSignature(object panel)
@@ -606,10 +620,10 @@ namespace CMS2026SimpleConsole
 
             // Max log lines
             CfgMaxLogRow(content, ref y);
-            CfgMaxDisplayRow(content, ref y);   
+            CfgMaxDisplayRow(content, ref y);
 
             // Panel size (UIToolkit only)
-            CfgPanelSizeRow(content, "Panel width", "panel_width", 560f, 1400f, ref y);
+            CfgPanelSizeRow(content, "Panel width", "panel_width", 660f, 1400f, ref y);
             CfgPanelSizeRow(content, "Panel height", "panel_height", 300f, 1000f, ref y);
 
             //opacity panel
@@ -1196,12 +1210,49 @@ namespace CMS2026SimpleConsole
             _heartAnimTarget = (_heartAnimTarget > 0.5f) ? 0f : 1f;
             RefreshHeartButtonLabel();
 
-            // Wzajemne wykluczanie — gasim config jeśli jest otwarty
             if (_heartAnimTarget > 0.5f && _animTarget > 0.5f)
             {
                 _animTarget = 0f;
                 RefreshConfigButtonLabel();
             }
+            if (_heartAnimTarget > 0.5f && _modsAnimTarget > 0.5f)   // ← DODAJ
+            {
+                _modsAnimTarget = 0f;
+                RefreshModsButtonLabel();
+            }
+        }
+
+        private void UpdateModsAnimation()
+        {
+            if (Mathf.Abs(_modsAnimProgress - _modsAnimTarget) < 0.001f) return;
+
+            _modsAnimProgress = Mathf.MoveTowards(
+                _modsAnimProgress, _modsAnimTarget, AnimSpeed * Time.deltaTime);
+
+            float t = SmoothStep(_modsAnimProgress);
+
+            if (_modsPanelPtr != IntPtr.Zero)
+            {
+                if (_modsAnimProgress <= 0.01f)
+                {
+                    ApplyDisplay(_modsPanelPtr, false);
+                    _modsScrollY = 0f;
+                    ApplyModsScroll();
+                }
+                else
+                {
+                    ApplyDisplay(_modsPanelPtr, true);
+                    var mv = Wrap(_modsPanelPtr);
+                    SOpacity(Style(mv), t);
+                    STop(Style(mv), (TitleH + Pad) + (1f - t) * 22f);
+                }
+            }
+        }
+
+        private void ApplyModsScroll()
+        {
+            if (_modsContentPtr == IntPtr.Zero) return;
+            STop(Style(Wrap(_modsContentPtr)), -_modsScrollY);
         }
 
         private void RefreshHeartButtonLabel()
@@ -1261,6 +1312,7 @@ namespace CMS2026SimpleConsole
             HandleDrag();
             UpdateConfigAnimation();
             UpdateHeartAnimation();
+            UpdateModsAnimation();
             UpdateSharedLogViewport();
             ProcessFlashQueue();
         }
@@ -1416,6 +1468,13 @@ namespace CMS2026SimpleConsole
             _heartAnimTarget = 0f;
             _heartScrollY = 0f;
 
+            _modsPanelPtr = IntPtr.Zero;
+            _modsContentPtr = IntPtr.Zero;
+            _modsBtnPtr = IntPtr.Zero;
+            _modsAnimProgress = 0f;
+            _modsAnimTarget = 0f;
+            _modsScrollY = 0f;
+
             BuildPanel(root);
             RebuildAllLines();
         }
@@ -1454,6 +1513,12 @@ namespace CMS2026SimpleConsole
             bool inArea = mx >= vpLeft && mx <= vpRight && muitY >= vpTop && muitY <= vpBottom;
             if (!inArea) return;
 
+            if (_modsAnimProgress >= 0.99f)
+            {
+                float maxScroll = Mathf.Max(0f, _modsContentH - LogViewH);
+                _modsScrollY = Mathf.Clamp(_modsScrollY - delta * 40f, 0f, maxScroll);
+                ApplyModsScroll();
+            }
             if (_heartAnimProgress >= 0.99f)
             {
                 float maxScroll = Mathf.Max(0f, _heartContentH - LogViewH);
@@ -1629,13 +1694,18 @@ namespace CMS2026SimpleConsole
             _animTarget = (_animTarget > 0.5f) ? 0f : 1f;
             RefreshConfigButtonLabel();
 
-            // Wzajemne wykluczanie — gasim heart jeśli jest otwarty
             if (_animTarget > 0.5f && _heartAnimTarget > 0.5f)
             {
                 _heartAnimTarget = 0f;
                 RefreshHeartButtonLabel();
             }
+            if (_animTarget > 0.5f && _modsAnimTarget > 0.5f)   // ← DODAJ
+            {
+                _modsAnimTarget = 0f;
+                RefreshModsButtonLabel();
+            }
         }
+
 
         private void RefreshConfigButtonLabel()
         {
@@ -1706,19 +1776,151 @@ namespace CMS2026SimpleConsole
             }
         }
 
+        private void BuildModsPanel(object panel)
+        {
+            float vpTop = TitleH + Pad;
+
+            var mods = VE();
+            var s = Style(mods);
+            SPosition(s, "Absolute");
+            SLeft(s, Pad); STop(s, vpTop);
+            SWidth(s, PanelW - Pad * 2); SHeight(s, LogViewH);
+            SBg(s, new Color(0.05f, 0.04f, 0.10f, 1f));
+            SOverflow(s, "Hidden");
+            SOpacity(s, 0f);
+            AddChild(panel, mods);
+            _modsPanelPtr = Ptr(mods);
+            ApplyDisplay(_modsPanelPtr, false);
+
+            var content = VE();
+            var cs = Style(content);
+            SPosition(cs, "Absolute");
+            SLeft(cs, 0f); STop(cs, 0f);
+            SWidth(cs, PanelW - Pad * 2);
+            AddChild(mods, content);
+            _modsContentPtr = Ptr(content);
+
+            
+            _modsContentH = PopulateModsContent(content);
+        }
+
+        public void RebuildModsPanel()
+        {
+            if (!_initialized || _modsPanelPtr == IntPtr.Zero) return;
+            // Wyczyść i odbuduj content
+            var content = Wrap(_modsContentPtr);
+            _veType.GetMethod("Clear").Invoke(content, null);
+            _modsContentH = PopulateModsContent(content);
+        }
+
+        private float PopulateModsContent(object content)
+        {
+            float y = 12f;
+
+            CfgLabel(content, "🧩   Installed Mods",
+                Pad, y, PanelW - Pad * 4, 26f,
+                new Color(0.75f, 0.55f, 1.00f, 1f), fontSize: 13);
+            y += 30f;
+
+            CfgDivider(content, y, new Color(0.45f, 0.30f, 0.75f, 0.8f));
+            y += 14f;
+
+            var mods = ModRegistry.GetAll().ToList();
+
+            if (mods.Count == 0)
+            {
+                CfgLabel(content, "No mods detected.",
+                    Pad * 2, y, PanelW - Pad * 6, 20f,
+                    new Color(0.55f, 0.50f, 0.65f, 1f));
+                y += 28f;
+                return y;
+            }
+
+            foreach (var mod in mods)
+            {
+                CfgDivider(content, y, new Color(0.30f, 0.22f, 0.50f, 0.5f));
+                y += 10f;
+
+                // Nazwa + wersja
+                CfgLabel(content, mod.Name,
+                    Pad * 2, y, PanelW - Pad * 6 - 64f, 20f,
+                    new Color(0.92f, 0.88f, 1.00f, 1f));
+
+                CfgLabel(content, $"v{mod.Version}",
+                    PanelW - Pad * 2 - 60f, y, 56f, 18f,
+                    new Color(0.55f, 0.50f, 0.72f, 1f));
+                y += 22f;
+
+                // Autor + opis
+                string sub = $"by  {mod.Author}";
+                if (!string.IsNullOrEmpty(mod.Description)) sub += $"  ·  {mod.Description}";
+                CfgLabel(content, sub,
+                    Pad * 2, y, PanelW - Pad * 6, 18f,
+                    new Color(0.68f, 0.65f, 0.80f, 1f));
+                y += 26f;
+
+                // Linki — tylko jeśli są
+                float btnX = Pad * 2;
+                if (!string.IsNullOrEmpty(mod.GitHubUrl))
+                {
+                    string url = mod.GitHubUrl;
+                    MakeButton(content, "GitHub →",
+                        btnX, y, 100f, 22f,
+                        new Color(0.13f, 0.10f, 0.22f, 1f),
+                        () => UnityEngine.Application.OpenURL(url));
+                    btnX += 108f;
+                }
+                if (!string.IsNullOrEmpty(mod.NexusUrl))
+                {
+                    string url = mod.NexusUrl;
+                    MakeButton(content, "Nexus Mods →",
+                        btnX, y, 110f, 22f,
+                        new Color(0.20f, 0.10f, 0.05f, 1f),
+                        () => UnityEngine.Application.OpenURL(url));
+                }
+                y += 34f;
+            }
+
+            return y + 8f;
+        }
+
+        private void ToggleMods()
+        {
+            _modsAnimTarget = (_modsAnimTarget > 0.5f) ? 0f : 1f;
+            RefreshModsButtonLabel();
+
+            if (_modsAnimTarget > 0.5f && _animTarget > 0.5f)
+            {
+                _animTarget = 0f;
+                RefreshConfigButtonLabel();
+            }
+            if (_modsAnimTarget > 0.5f && _heartAnimTarget > 0.5f)
+            {
+                _heartAnimTarget = 0f;
+                RefreshHeartButtonLabel();
+            }
+        }
+
+        private void RefreshModsButtonLabel()
+        {
+            if (_modsBtnPtr == IntPtr.Zero) return;
+            bool showing = _modsAnimTarget > 0.5f;
+            var btn = Activator.CreateInstance(_btnType, new object[] { _modsBtnPtr });
+            _btnType.GetProperty("text").SetValue(btn, showing ? "✕  Close" : "🧩  Mods");
+            SBg(Style(btn), showing
+                ? new Color(0.45f, 0.12f, 0.12f, 1f)
+                : new Color(0.28f, 0.22f, 0.45f, 1f));
+        }
 
         private void UpdateSharedLogViewport()
         {
             if (_logViewportPtr == IntPtr.Zero) return;
 
-            // Łączony progress — bierzemy ten który bardziej "zakrywa" logi
-            float combined = Mathf.Max(_animProgress, _heartAnimProgress);
+            float combined = Mathf.Max(_animProgress, _heartAnimProgress, _modsAnimProgress);  // ← dodaj _modsAnimProgress
             float t = SmoothStep(combined);
 
             if (combined >= 0.99f)
-            {
                 ApplyDisplay(_logViewportPtr, false);
-            }
             else
             {
                 ApplyDisplay(_logViewportPtr, true);

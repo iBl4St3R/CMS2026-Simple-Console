@@ -128,3 +128,71 @@ public override void OnInitializeMelon()
 - **Unregistering** a command is possible via `UnregisterCommand("yourmod_hello")` (Option B) or the same method name via reflection (Option A).
 - Your commands appear automatically in the `help` output under the **Mod commands** section.
 - If you register the same command name twice, the second call is silently ignored — always use a unique prefix.
+
+
+
+## Registering your mod in the Mods panel
+
+The console has a built-in **Mods** panel that lists installed mods with version, author, description and links.  
+You can register your mod there using the same reflection approach.
+
+### Option A — Reflection (recommended)
+```csharp
+private void TryRegisterInConsole()
+{
+    var apiType = AppDomain.CurrentDomain.GetAssemblies()
+        .SelectMany(a => { try { return a.GetTypes(); } catch { return System.Type.EmptyTypes; } })
+        .FirstOrDefault(t => t.FullName == "CMS2026SimpleConsole.ConsoleAPI");
+
+    if (apiType == null) return;
+
+    apiType.GetMethod("RegisterMod")?.Invoke(null, new object[]
+    {
+        "YourModAssemblyName",          // assembly name — must match your .dll file name exactly
+        "Your Mod Display Name",        // name shown in the panel
+        "YourNick",                     // author
+        "Short description of the mod", // description (optional, pass "" if none)
+        "https://github.com/...",       // GitHub URL  (optional, pass null if none)
+        "https://www.nexusmods.com/...",// Nexus URL   (optional, pass null if none)
+        null                            // version — null = auto-detected from MelonInfo
+    });
+}
+```
+
+Call it from `OnSceneWasInitialized` or `OnInitializeMelon`:
+```csharp
+public override void OnSceneWasInitialized(int buildIndex, string sceneName)
+{
+    TryRegisterInConsole();
+}
+```
+
+### Option B — Direct reference
+```csharp
+using CMS2026SimpleConsole;
+
+ConsoleAPI.RegisterMod(
+    assemblyName: "YourModAssemblyName",
+    displayName:  "Your Mod Display Name",
+    author:       "YourNick",
+    description:  "Short description",
+    gitHubUrl:    "https://github.com/...",
+    nexusUrl:     null,
+    version:      null   // null = auto from MelonInfo
+);
+```
+
+### Notes
+
+| Field | Required | Notes |
+|---|---|---|
+| `assemblyName` | ✅ | Must match your `.dll` name (without extension) |
+| `displayName` | ✅ | Shown in the panel header |
+| `author` | ✅ | |
+| `description` | ❌ | Pass `""` if empty |
+| `gitHubUrl` | ❌ | Pass `null` to hide the button |
+| `nexusUrl` | ❌ | Pass `null` to hide the button |
+| `version` | ❌ | `null` = auto-detected from `MelonInfo` attribute |
+
+- Registering the same assembly name twice is silently ignored — the first registration wins.
+- If `version` is `null` and no `MelonInfo` attribute is found, the console falls back to the assembly version.

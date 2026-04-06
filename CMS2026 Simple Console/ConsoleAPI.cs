@@ -76,5 +76,38 @@ namespace CMS2026SimpleConsole
             foreach (var kv in _commands)
                 yield return (kv.Key, kv.Value.Description);
         }
+
+
+
+
+
+
+
+        // ── Mod registry ──────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Register your mod in the Mods panel of CMS2026 Simple Console.
+        /// Call this from OnSceneWasInitialized or OnInitializeMelon.
+        /// </summary>
+        public static bool RegisterMod(
+            string assemblyName,
+            string displayName,
+            string author,
+            string description = "",
+            string gitHubUrl = null,
+            string nexusUrl = null,
+            string version = null)
+        {
+            return ModRegistry.RegisterMod(new ModInfo
+            {
+                AssemblyName = assemblyName,
+                Name = displayName,
+                Author = author,
+                Description = description,
+                GitHubUrl = gitHubUrl,
+                NexusUrl = nexusUrl,
+                VersionOverride = version
+            });
+        }
     }
 }
