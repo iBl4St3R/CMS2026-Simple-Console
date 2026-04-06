@@ -322,8 +322,12 @@ namespace CMS2026SimpleConsole
             SBg(s, new Color(0.15f, 0.15f, 0.22f, 1f));
             SColor(s, Color.white);
             SFont(s);
-            _lblType.GetProperty("text").SetValue(lbl,
-                "  CMS2026 Simple Console");
+
+            // Fix: wyśrodkuj tekst pionowo w title barze
+            _sType.GetProperty("unityTextAlign").SetValue(s,
+                _staCtor.Invoke(new object[] { UnityEngine.TextAnchor.MiddleLeft }));
+
+            _lblType.GetProperty("text").SetValue(lbl, "  CMS2026 Simple Console");
             AddChild(panel, lbl);
         }
 
@@ -362,6 +366,15 @@ namespace CMS2026SimpleConsole
             SBg(s, new Color(0.04f, 0.04f, 0.07f, 1f));
             SColor(s, new Color(0.85f, 1f, 0.85f, 1f));
             SFont(s);
+
+            // TextField ma wewnętrzny input element — jedyna opcja przez reflection
+            // to ustawić paddingTop ręcznie tak żeby tekst był wizualnie na środku
+            // InputH=28, font ~13px → padding top ≈ 7px
+            _sType.GetProperty("paddingTop").SetValue(s, _slCtor.Invoke(new object[] { 7f }));
+            _sType.GetProperty("paddingBottom").SetValue(s, _slCtor.Invoke(new object[] { 0f }));
+            _sType.GetProperty("paddingLeft").SetValue(s, _slCtor.Invoke(new object[] { 6f }));
+            _sType.GetProperty("paddingRight").SetValue(s, _slCtor.Invoke(new object[] { 4f }));
+
             AddChild(panel, tf);
             _textFieldPtr = Ptr(tf);
             RegisterSubmitCallback(_textFieldPtr);
