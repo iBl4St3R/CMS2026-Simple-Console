@@ -108,16 +108,26 @@ namespace CMS2026SimpleConsole
             AddLog($"[Console] Unity log capture: {(logsOn ? "ON" : "OFF")}");
 
 
-            try
+            if (_config.GetBool("repl_enabled", false))
             {
-                AddLog("[REPL] Initializing...");
-                _repl = new ReplEvaluator(AddLog);
-                AddLog("[REPL] OK");
+                if (CheckReplDependencies())
+                {
+                    try
+                    {
+                        AddLog("[REPL] Initializing...");
+                        _repl = new ReplEvaluator(AddLog);
+                        AddLog("[REPL] OK — run / eval / runfile available.");
+                    }
+                    catch (Exception ex)
+                    {
+                        AddLog("[REPL] INIT ERROR: " + ex.GetType().Name);
+                        AddLog("[REPL] " + ex.Message);
+                    }
+                }
             }
-            catch (Exception ex)
+            else
             {
-                AddLog("[REPL] INIT ERROR: " + ex.GetType().Name);
-                AddLog("[REPL] " + ex.Message);
+                AddLog("[REPL] Disabled in config (repl_enabled = false).");
             }
 
             // Subscribe so registered commands show up in log immediately
@@ -460,6 +470,33 @@ namespace CMS2026SimpleConsole
             return results;
         }
 
+        private bool CheckReplDependencies()
+        {
+            string userLibs = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserLibs");
+            var required = new[]
+            {
+        "Microsoft.CodeAnalysis.dll",
+        "Microsoft.CodeAnalysis.CSharp.dll",
+    };
+
+            bool ok = true;
+            foreach (string dll in required)
+            {
+                string path = Path.Combine(userLibs, dll);
+                if (!File.Exists(path))
+                {
+                    AddLog($"[REPL] MISSING dependency: {dll}");
+                    AddLog($"[REPL] Place it in: {userLibs}");
+                    ok = false;
+                }
+            }
+
+            if (!ok)
+                AddLog("[REPL] REPL disabled — install missing libraries and restart.");
+
+            return ok;
+        }
+
         private void OpenModFolder()
         {
             try
@@ -653,17 +690,22 @@ namespace CMS2026SimpleConsole
                 {
                     case "run":
                     case "eval":
+                        if (_repl == null)
+                        {
+                            AddLog("[REPL] REPL is not active.");
+                            AddLog("[REPL] Enable 'repl_enabled' in Config panel and restart.");
+                            break;
+                        }
                         string code = raw.Substring(cmd.Length).Trim();
-                        if (_repl == null) { AddLog("[eval] ERROR: REPL not init!"); break; }
                         if (string.IsNullOrEmpty(code)) AddLog("[eval] Usage: eval <C# code>");
                         else _repl.Evaluate(code);
                         break;
 
                     case "runfile":
-                        if (_cmdParts.Length < 2)
+                        if (_repl == null)
                         {
-                            AddLog("Usage: runfile <filename>");
-                            AddLog($"Scripts folder: {DumpDir}");
+                            AddLog("[REPL] REPL is not active.");
+                            AddLog("[REPL] Enable 'repl_enabled' in Config panel and restart.");
                             break;
                         }
                         string fileName = string.Join(" ", _cmdParts.Skip(1));

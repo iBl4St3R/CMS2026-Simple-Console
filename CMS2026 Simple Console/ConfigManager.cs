@@ -12,6 +12,7 @@ namespace CMS2026SimpleConsole
 
         private static readonly Dictionary<string, string> Defaults = new()
         {
+            { "repl_enabled", "false" },
             { "uitoolkit_priority",    "true"  },
             { "show_timestamps",       "true"  },
             { "lock_input_when_open",  "true"  },
