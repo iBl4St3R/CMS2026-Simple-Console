@@ -134,6 +134,14 @@ namespace CMS2026SimpleConsole
             ConsoleAPI.OnCommandRegistered += (name, desc) => AddLog($"[API] Command registered: '{name}' — {desc}");
 
 
+            //sub msg zewnetrznych
+            ConsoleAPI.OnPrint += (msg, src) =>
+            {
+                string prefix = string.IsNullOrEmpty(src) ? "" : $"[{src}] ";
+                AddLog($"{prefix}{msg}");
+            };
+
+
             // Ukryj konsolę na starcie jeśli opcja wyłączona
             if (!(_config?.GetBool("show_at_startup", true) ?? true))
                 _renderer.SetVisible(false);

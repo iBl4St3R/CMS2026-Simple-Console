@@ -27,6 +27,20 @@ namespace CMS2026SimpleConsole
         internal static event Action<string, string> OnCommandRegistered;
 
         /// <summary>
+        /// Fired when any mod calls Print() — ConsoleComponent subscribes to display it.
+        /// </summary>
+        internal static event Action<string, string> OnPrint;
+
+        /// <summary>
+        /// Write a message to the Simple Console output panel.
+        /// source — optional tag shown in brackets, e.g. "OXL" or "UIKit".
+        /// </summary>
+        public static void Print(string message, string source = "") => OnPrint?.Invoke(message ?? "", source ?? "");
+
+        /// <summary>Single-arg overload — source tag left empty.</summary>
+        public static void Print(string message) => OnPrint?.Invoke(message ?? "", "");
+
+        /// <summary>
         /// Register a new console command.
         /// </summary>
         /// <param name="name">Command name (lowercase, no spaces). Use a mod prefix, e.g. "moneycheat_add".</param>
