@@ -883,17 +883,32 @@ namespace CMS2026SimpleConsole
                     case "save":
                         try
                         {
+                            // Krok 1: Zapisujemy stan garażu (pozycje aut, założone części, kolory)
+                            var gl = UnityEngine.Object.FindObjectOfType<Il2CppCMS.SceneLoaders.GarageLoader>();
+                            if (gl != null)
+                            {
+                                gl.SaveState();
+                                AddLog("[Save] Garage state updated.");
+                            }
+
+                            // Krok 2: Wywołujemy główny zapis profilu w SaveManager
                             var smInst = GetSaveManagerInstance();
                             if (smInst != null)
                             {
                                 smInst.GetType()
                                       .GetMethod("SaveCurrentProfile")
                                       ?.Invoke(smInst, null);
-                                AddLog("[Save] Game saved successfully.");
+                                AddLog("[Save] Game profile saved successfully.");
                             }
-                            else AddLog("[Save] SaveManager not found.");
+                            else
+                            {
+                                AddLog("[Save] SaveManager not found.");
+                            }
                         }
-                        catch (Exception ex) { AddLog("[Save] ERR: " + ex.Message); }
+                        catch (Exception ex)
+                        {
+                            AddLog("[Save] ERR: " + ex.Message);
+                        }
                         break;
 
                     case "gamelocation":
