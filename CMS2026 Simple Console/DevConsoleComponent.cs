@@ -27,6 +27,13 @@ namespace CMS2026SimpleConsole
         // ── Standalone input lock ─────────────────────────────────────────────
         private bool _standaloneLockActive = false;
 
+        // ── Framework CursorManager bridge ───────────────────────────────────────
+        private static System.Reflection.MethodInfo _fwRequest;
+        private static System.Reflection.MethodInfo _fwRelease;
+        private static bool _fwCursorResolved = false;
+        private bool _cursorRequested = false;   // czy konsola aktualnie trzyma żądanie
+
+
         // ── Key binding ───────────────────────────────────────────────────────
         private bool _waitingForKey = false;
         private string _bindingConfigKey = "";
@@ -261,6 +268,8 @@ namespace CMS2026SimpleConsole
 
         private void LateUpdate()
         {
+            TryResolveFrameworkCursor();   // no-op po pierwszym wywołaniu
+
             bool lockWhenOpen = _config?.GetBool("lock_input_when_open", true) ?? true;
             bool consoleLocks = _renderer.IsVisible && lockWhenOpen;
             bool effectiveLock = consoleLocks || _standaloneLockActive;
@@ -271,7 +280,22 @@ namespace CMS2026SimpleConsole
                 SetGameInputEnabled(!effectiveLock);
             }
 
-            if (_renderer.IsVisible)
+            // ── Cursor: śledź przejścia, nie wymuszaj co klatkę ──────────────────
+            bool wantCursor = _renderer.IsVisible;
+
+            if (wantCursor && !_cursorRequested)
+            {
+                _cursorRequested = true;
+                CursorRequest();
+            }
+            else if (!wantCursor && _cursorRequested)
+            {
+                _cursorRequested = false;
+                CursorRelease();
+            }
+
+            // Standalone: bez frameworka wymuszaj stan co klatkę żeby gra nie nadpisała
+            if (!HasFrameworkCursor && _renderer.IsVisible)
             {
                 if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
                 if (!Cursor.visible) Cursor.visible = true;
@@ -328,8 +352,14 @@ namespace CMS2026SimpleConsole
         {
             ConsolePlugin.ConsoleComponent = null;
             if (_inputLocked) SetGameInputEnabled(true);
-            _renderer?.Destroy();
 
+            if (_cursorRequested)   
+            {
+                _cursorRequested = false;
+                CursorRelease();
+            }
+
+            _renderer?.Destroy();
             Application.remove_logMessageReceived(new Action<string, string, LogType>(OnUnityLog));
         }
 
@@ -726,11 +756,8 @@ namespace CMS2026SimpleConsole
                         break;
 
                     case "resetscene":
-                        AddLog("Reloading garage scene...");
-                        if (SceneLoader.Instance != null)
-                            SceneLoader.Instance.LoadScene("Garage");
-                        else
-                            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+                        // Zamiast natychmiastowego przeładowania, uruchamiamy rutynę z opóźnieniem
+                        MelonLoader.MelonCoroutines.Start(SaveAndResetRoutine());
                         break;
 
                     case "charspeed":
@@ -881,34 +908,7 @@ namespace CMS2026SimpleConsole
                         break;
 
                     case "save":
-                        try
-                        {
-                            // Krok 1: Zapisujemy stan garażu (pozycje aut, założone części, kolory)
-                            var gl = UnityEngine.Object.FindObjectOfType<Il2CppCMS.SceneLoaders.GarageLoader>();
-                            if (gl != null)
-                            {
-                                gl.SaveState();
-                                AddLog("[Save] Garage state updated.");
-                            }
-
-                            // Krok 2: Wywołujemy główny zapis profilu w SaveManager
-                            var smInst = GetSaveManagerInstance();
-                            if (smInst != null)
-                            {
-                                smInst.GetType()
-                                      .GetMethod("SaveCurrentProfile")
-                                      ?.Invoke(smInst, null);
-                                AddLog("[Save] Game profile saved successfully.");
-                            }
-                            else
-                            {
-                                AddLog("[Save] SaveManager not found.");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            AddLog("[Save] ERR: " + ex.Message);
-                        }
+                        PerformSave(); // Używamy nowej metody pomocniczej
                         break;
 
                     case "gamelocation":
@@ -966,6 +966,39 @@ namespace CMS2026SimpleConsole
             GUIUtility.systemCopyBuffer = sb.ToString();
             AddLog("Log copied to clipboard.");
         }
+
+        private static void TryResolveFrameworkCursor()
+        {
+            if (_fwCursorResolved) return;
+            _fwCursorResolved = true;
+            try
+            {
+                var t = AppDomain.CurrentDomain.GetAssemblies()
+                    .SelectMany(a => { try { return a.GetTypes(); } catch { return Type.EmptyTypes; } })
+                    .FirstOrDefault(x => x.FullName == "CMS2026UITKFramework.CursorManager");
+                if (t == null) return;
+                var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static;
+                _fwRequest = t.GetMethod("Request", flags);
+                _fwRelease = t.GetMethod("Release", flags);
+            }
+            catch { }
+        }
+
+        private static bool HasFrameworkCursor => _fwRequest != null && _fwRelease != null;
+
+        private void CursorRequest()
+        {
+            if (HasFrameworkCursor) { try { _fwRequest.Invoke(null, null); } catch { } }
+            else { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
+        }
+
+        private void CursorRelease()
+        {
+            if (HasFrameworkCursor) { try { _fwRelease.Invoke(null, null); } catch { } }
+            // bez framework: gra sama przywróci kursor przy powrocie do gameMode
+        }
+
+
 
         [HideFromIl2Cpp]
         private void DumpCarHierarchyToClipboard()
@@ -1088,7 +1121,50 @@ namespace CMS2026SimpleConsole
             return Activator.CreateInstance(glType, new object[] { gls[0].Pointer });
         }
 
+        private void PerformSave()
+        {
+            try
+            {
+                // Krok 1: Stan garażu
+                var gl = UnityEngine.Object.FindObjectOfType<Il2CppCMS.SceneLoaders.GarageLoader>();
+                if (gl != null)
+                {
+                    gl.SaveState();
+                    AddLog("[Save] Garage state updated.");
+                }
 
+                // Krok 2: Profil gracza
+                var smInst = GetSaveManagerInstance();
+                if (smInst != null)
+                {
+                    smInst.GetType().GetMethod("SaveCurrentProfile")?.Invoke(smInst, null);
+                    AddLog("[Save] Game profile saved successfully.");
+                }
+                else
+                {
+                    AddLog("[Save] SaveManager not found.");
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("[Save] ERR: " + ex.Message);
+            }
+        }
+
+        private System.Collections.IEnumerator SaveAndResetRoutine()
+        {
+            AddLog("[Reset] Initiating auto-save before reload...");
+            PerformSave();
+
+            // Krótkie oczekiwanie (np. 0.5 sekundy), aby operacje I/O mogły się zakończyć
+            yield return new WaitForSeconds(0.5f);
+
+            AddLog("Reloading garage scene...");
+            if (SceneLoader.Instance != null)
+                SceneLoader.Instance.LoadScene("Garage");
+            else
+                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
 
         //TODO rozszerzyc do api/mods
         private string GetAutocompleteMatch(string prefix)
