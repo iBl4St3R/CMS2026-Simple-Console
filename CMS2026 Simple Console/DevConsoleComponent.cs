@@ -710,7 +710,6 @@ namespace CMS2026SimpleConsole
             HardResetAc();
             AddLog("> " + raw);
 
-            // Zapisz do historii — nie duplikuj ostatniego wpisu
             if (_history.Count == 0 || _history[_history.Count - 1] != raw)
             {
                 _history.Add(raw);
@@ -757,7 +756,6 @@ namespace CMS2026SimpleConsole
                         break;
 
                     case "resetscene":
-                        // Zamiast natychmiastowego przeładowania, uruchamiamy rutynę z opóźnieniem
                         MelonLoader.MelonCoroutines.Start(SaveAndResetRoutine());
                         break;
 
@@ -860,7 +858,6 @@ namespace CMS2026SimpleConsole
                         AddLog("  showgaragecars          – list cars in garage");
                         AddLog("  showparkingcars         – list cars on parking lot");
 
-                        // ── External commands from other mods ──────────────────
                         var externalCmds = ConsoleAPI.GetAll().ToList();
                         if (externalCmds.Count > 0)
                         {
@@ -909,7 +906,7 @@ namespace CMS2026SimpleConsole
                         break;
 
                     case "save":
-                        PerformSave(); // Używamy nowej metody pomocniczej
+                        PerformSave();
                         break;
 
                     case "gamelocation":
@@ -936,9 +933,30 @@ namespace CMS2026SimpleConsole
                                 "StreamingAssets", "Cars"), "Cars");
                         break;
 
-
                     default:
-                        // ── Check external commands registered via ConsoleAPI ──────
+                        // ── .cs shortcut — wpisanie nazwy pliku uruchamia runfile ──────
+                        if (cmd.EndsWith(".cs"))
+                        {
+                            if (_repl == null)
+                            {
+                                AddLog("[REPL] REPL is not active.");
+                                AddLog("[REPL] Enable 'repl_enabled' in Config panel and restart.");
+                                break;
+                            }
+                            string shortFilePath = Path.IsPathRooted(raw)
+                                ? raw
+                                : Path.Combine(DumpDir, raw);
+                            if (!File.Exists(shortFilePath))
+                            {
+                                AddLog($"[runfile] File not found: {shortFilePath}");
+                                break;
+                            }
+                            AddLog($"[runfile] Running: {Path.GetFileName(shortFilePath)}");
+                            _repl.Evaluate(File.ReadAllText(shortFilePath));
+                            break;
+                        }
+
+                        // ── Check external commands registered via ConsoleAPI ──────────
                         if (ConsoleAPI.TryExecute(cmd, _cmdParts, out string apiError))
                         {
                             if (apiError != null)
