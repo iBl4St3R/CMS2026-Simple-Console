@@ -286,7 +286,7 @@ namespace CMS2026SimpleConsole
 
             psType.GetProperty("scaleMode").SetValue(psWrap, Enum.Parse(smType, "ConstantPixelSize"));
             psType.GetProperty("scale").SetValue(psWrap, 1.0f);
-            psType.GetProperty("sortingOrder").SetValue(psWrap, 9999);
+            psType.GetProperty("sortingOrder").SetValue(psWrap, 99999);
 
             _go = new GameObject("CMS_UIToolkitConsoleRenderer");
             UnityEngine.Object.DontDestroyOnLoad(_go);
