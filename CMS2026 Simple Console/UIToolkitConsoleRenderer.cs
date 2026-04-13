@@ -125,6 +125,8 @@ namespace CMS2026SimpleConsole
 
         public bool InitFailed => _initFailed;
 
+        private IntPtr _softCursorPtr;
+
         // ── Interface ─────────────────────────────────────────────────────────────
         public bool IsVisible => _visible;
         public string CommandInput
@@ -286,7 +288,20 @@ namespace CMS2026SimpleConsole
 
             psType.GetProperty("scaleMode").SetValue(psWrap, Enum.Parse(smType, "ConstantPixelSize"));
             psType.GetProperty("scale").SetValue(psWrap, 1.0f);
-            psType.GetProperty("sortingOrder").SetValue(psWrap, 99999);
+
+            // ── ThemeStyleSheet — tak jak framework, bez tego Unity może resetować ustawienia ──
+            try
+            {
+                var tssType = _ueAsm.GetType("UnityEngine.UIElements.ThemeStyleSheet");
+                if (tssType != null)
+                {
+                    var tss = UnityEngine.ScriptableObject.CreateInstance(
+                        Il2CppInterop.Runtime.Il2CppType.From(tssType));
+                    psType.GetProperty("themeStyleSheet")?.SetValue(psWrap,
+                        Activator.CreateInstance(tssType, new object[] { tss.Pointer }));
+                }
+            }
+            catch { }
 
             _go = new GameObject("CMS_UIToolkitConsoleRenderer");
             UnityEngine.Object.DontDestroyOnLoad(_go);
@@ -295,8 +310,69 @@ namespace CMS2026SimpleConsole
             var docWrap = Activator.CreateInstance(docType, new object[] { ((Component)docRaw).Pointer });
             docType.GetProperty("panelSettings").SetValue(docWrap, psWrap);
 
+            // ── sortingOrder PO podpięciu UIDocument — tak jak framework robi w SetSortOrder() ──
+            psType.GetProperty("sortingOrder").SetValue(psWrap, 48500);
+
             var root = docType.GetProperty("rootVisualElement").GetValue(docWrap);
             BuildPanel(root);
+            BuildSoftCursor(root);
+
+        }
+
+        private void BuildSoftCursor(object root)
+        {
+            var pickingModeType = _ueAsm.GetType("UnityEngine.UIElements.PickingMode");
+            Action<object> ignore = ve => {
+                if (pickingModeType != null)
+                    _veType.GetProperty("pickingMode")?.SetValue(ve,
+                        Enum.Parse(pickingModeType, "Ignore"));
+            };
+
+            var container = VE();
+            var cs = Style(container);
+            SPosition(cs, "Absolute");
+            SWidth(cs, 12f); SHeight(cs, 18f);
+            SBg(cs, new Color(0, 0, 0, 0));
+            ignore(container);
+
+            // Kształt klasycznej strzałki: szersza góra, wąski shaft na dole
+            // row → (xOffset, width) — prawa krawędź się skraca (skos)
+            var rows = new (float x, float w)[]
+{
+    (0f, 2f),
+    (0f, 4f),
+    (0f, 6f),
+    (0f, 8f),
+    (0f, 10f),
+    (0f, 8f),
+    (0f, 6f),
+    (0f, 4f),
+    (0f, 2f),
+};
+
+            for (int i = 0; i < rows.Length; i++)
+            {
+                float yPos = i * 2f;
+                var (xOff, w) = rows[i];
+
+                var shadow = VE(); var ss = Style(shadow);
+                SPosition(ss, "Absolute");
+                SLeft(ss, xOff + 1f); STop(ss, yPos + 1f);
+                SWidth(ss, w); SHeight(ss, 2f);
+                SBg(ss, new Color(0f, 0f, 0f, 0.65f));
+                ignore(shadow); AddChild(container, shadow);
+
+                var bar = VE(); var bs = Style(bar);
+                SPosition(bs, "Absolute");
+                SLeft(bs, xOff); STop(bs, yPos);
+                SWidth(bs, w); SHeight(bs, 2f);
+                SBg(bs, Color.white);
+                ignore(bar); AddChild(container, bar);
+            }
+
+            AddChild(root, container);
+            _softCursorPtr = Ptr(container);
+            ApplyDisplay(_softCursorPtr, _visible);
         }
 
         private void BuildPanel(object root)
@@ -332,7 +408,7 @@ namespace CMS2026SimpleConsole
             var psType = _ueAsm.GetType("UnityEngine.UIElements.PanelSettings");
             var smType = _ueAsm.GetType("UnityEngine.UIElements.PanelScaleMode");
             var psWrap = Activator.CreateInstance(psType, new object[] { _psPtr });
-            psType.GetProperty("sortingOrder").SetValue(psWrap, 9999);
+            psType.GetProperty("sortingOrder").SetValue(psWrap, 48500);
             psType.GetProperty("scaleMode").SetValue(psWrap, Enum.Parse(smType, "ConstantPixelSize"));
             psType.GetProperty("scale").SetValue(psWrap, 1.0f);
         }
@@ -1281,6 +1357,8 @@ namespace CMS2026SimpleConsole
         {
             _visible = visible;
             if (_initialized) ApplyDisplay(_panelPtr, visible);
+
+            if (_softCursorPtr != IntPtr.Zero) ApplyDisplay(_softCursorPtr, visible);
         }
 
         public void AddLine(string line)
@@ -1314,12 +1392,23 @@ namespace CMS2026SimpleConsole
             if (!_initialized || !_visible) return;
             HandleScroll();
             HandleDrag();
+            UpdateSoftCursor();
             UpdateConfigAnimation();
             UpdateHeartAnimation();
             UpdateModsAnimation();
             UpdateSharedLogViewport();
             ProcessFlashQueue();
         }
+        private void UpdateSoftCursor()
+        {
+            if (_softCursorPtr == IntPtr.Zero) return;
+            float x = Input.mousePosition.x;
+            float y = Screen.height - Input.mousePosition.y - 1f;
+            var s = Style(Wrap(_softCursorPtr));
+            SLeft(s, x); STop(s, y);
+        }
+
+
 
         private void ProcessFlashQueue()
         {
@@ -1479,8 +1568,17 @@ namespace CMS2026SimpleConsole
             _modsAnimTarget = 0f;
             _modsScrollY = 0f;
 
+
+            if (_softCursorPtr != IntPtr.Zero)
+            {
+                var oldCursor = Activator.CreateInstance(_veType, new object[] { _softCursorPtr });
+                _veType.GetMethod("Remove", new Type[] { _veType })?.Invoke(root, new object[] { oldCursor });
+                _softCursorPtr = IntPtr.Zero;
+            }
+
             BuildPanel(root);
             RebuildAllLines();
+            BuildSoftCursor(root);
         }
 
         private void ScrollToBottom()

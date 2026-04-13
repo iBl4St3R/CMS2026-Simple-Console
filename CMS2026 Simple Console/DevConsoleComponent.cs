@@ -298,7 +298,8 @@ namespace CMS2026SimpleConsole
             if (!HasFrameworkCursor && _renderer.IsVisible)
             {
                 if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
-                if (!Cursor.visible) Cursor.visible = true;
+                // ukryj systemowy kursor — zastępujemy go soft cursorem
+                if (Cursor.visible) Cursor.visible = false;
             }
         }
 
