@@ -56,10 +56,12 @@ namespace CMS2026SimpleConsole
 
         // ── Autocomplete ──────────────────────────────────────────────────────────
         private static readonly string[] _builtinCommands = new[]
-        {
+ {
     "help", "helpadv", "exit", "save", "resetscene",
     "gamelocation", "savelocation", "modslocation", "carslocation",
     "charspeed", "addmoney", "setmoney", "addexp",
+    "allskills", "timescale", "settime", "addtime", 
+    "savetp", "tp", "listtp", "removetp",
     "stealcustomercar", "fixcar", "removedemowalls",
     "showgaragecars", "showparkingcars",
     "storecarinparking", "unstorecarfromparking",
@@ -72,6 +74,11 @@ namespace CMS2026SimpleConsole
         private int _acIndex = -1;
         private string _acPrefix = null;   // null = brak aktywnej sesji AC
         private bool _suppressResetAc = false;
+
+
+        // ── Teleporty ─────────────────────────────────────────────────────────────
+        private readonly Dictionary<string, Vector3> _teleports = new();
+        private string TpFilePath => Path.Combine(ConsolePlugin.Config?.ConfigFolderPath?? Path.Combine(ConsolePlugin.ModDir, "CMS2026SimpleConsole"),"tps.txt");
 
         private int MaxLogLines => int.TryParse(_config?.GetString("max_log_lines", "2000"), out int v) && v >= 100 ? v : 2000;
 
@@ -152,6 +159,9 @@ namespace CMS2026SimpleConsole
             // Ukryj konsolę na starcie jeśli opcja wyłączona
             if (!(_config?.GetBool("show_at_startup", true) ?? true))
                 _renderer.SetVisible(false);
+
+
+            LoadTeleports();
         }
 
         private void InitRenderer()
@@ -682,6 +692,14 @@ namespace CMS2026SimpleConsole
             "[Heart]" => "#e87898",
             "[ERR]" => "#e05555",
             "[?]" => "#c87840",
+            "[settime]" => "#78a8c8",
+            "[addtime]" => "#78a8c8",
+            "[timescale]" => "#78a8c8",
+            "[noclip]" => "#a8c878",
+            "[allskills]" => "#a8c878",
+            "[TP]" => "#c8a870",
+            "[savetp]" => "#c8a870",
+            "[tp]" => "#c8a870",
             _ => null
         };
 
@@ -848,15 +866,25 @@ namespace CMS2026SimpleConsole
                         AddLog("  savelocation            – open save files folder");
                         AddLog("  modslocation            – open Mods folder");
                         AddLog("  carslocation            – open Cars (StreamingAssets) folder");
+                        AddLog("  carspawner.cs           – opens car spawner panel - need REPL + UITK Framework");
+                        AddLog("  perfmonitor.cs          – opens performance monitor REPL + UITK Framework");
                         AddLog("  charspeed <n>           – player walk speed");
                         AddLog("  addmoney [n]            – add money (default 10000)");
                         AddLog("  setmoney <n>            – set exact money amount");
                         AddLog("  addexp [n]              – add EXP (default 1000)");
                         AddLog("  stealcustomercar <idx>  – take ownership of customer car");
-                        AddLog("  fixcar <idx>            – repair all car parts to 100%");
+                        AddLog("  fixcar <idx>            – this is old use carspawner.cs instead");
                         AddLog("  removedemowalls         – disable demo map walls");
                         AddLog("  showgaragecars          – list cars in garage");
                         AddLog("  showparkingcars         – list cars on parking lot");
+                        AddLog("  allskills               – unlock all player skills");
+                        AddLog("  timescale <n>           – set game speed (0.1–10.0)");
+                        AddLog("  settime <HHMM>          – set in-game time (e.g. settime 1320)");
+                        AddLog("  savetp <name>           – save current position as teleport");
+                        AddLog("  tp <name>               – teleport to saved position");
+                        AddLog("  listtp                  – list all saved teleports");
+                        AddLog("  removetp <name>         – remove saved teleport");
+                        AddLog("  addtime <n>             – skip forward/back N hours (e.g. addtime 2  or  addtime -1)");
 
                         var externalCmds = ConsoleAPI.GetAll().ToList();
                         if (externalCmds.Count > 0)
@@ -933,6 +961,79 @@ namespace CMS2026SimpleConsole
                                 "StreamingAssets", "Cars"), "Cars");
                         break;
 
+
+                    case "allskills":
+                        CmdAllSkills();
+                        break;
+
+                    case "timescale":
+                        if (_cmdParts.Length > 1 &&
+                            float.TryParse(_cmdParts[1],
+                                System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture,
+                                out float tScale))
+                        {
+                            tScale = Mathf.Clamp(tScale, 0.1f, 10f);
+                            Time.timeScale = tScale;
+                            AddLog($"[timescale] <color=#7ec8a0>{tScale:F2}x</color>");
+                        }
+                        else AddLog("Usage: timescale <0.1–10.0>  (e.g. timescale 2  or  timescale 0.5)");
+                        break;
+
+                    case "settime":
+                        if (_cmdParts.Length > 1 && int.TryParse(_cmdParts[1], out int rawT))
+                        {
+                            int th = rawT / 100, tm = rawT % 100;
+                            if (th >= 0 && th <= 23 && tm >= 0 && tm <= 59)
+                                CmdSetTime(th, tm);
+                            else
+                                AddLog("[settime] Invalid value. Use HHMM, e.g. settime 1320 = 13:20");
+                        }
+                        else AddLog("Usage: settime <HHMM>  (e.g. settime 0800  or  settime 2230)");
+                        break;
+
+
+                    case "savetp":
+                        if (_cmdParts.Length > 1)
+                            CmdSaveTp(string.Join("_", _cmdParts.Skip(1)).ToLowerInvariant());
+                        else
+                            AddLog("Usage: savetp <name>  (e.g. savetp garage4)");
+                        break;
+
+                    case "tp":
+                        if (_cmdParts.Length > 1)
+                            MelonLoader.MelonCoroutines.Start(
+                                CmdTpRoutine(string.Join("_", _cmdParts.Skip(1)).ToLowerInvariant()));
+                        else
+                        {
+                            if (_teleports.Count == 0)
+                                AddLog("[TP] No teleports saved. Use: savetp <name>");
+                            else
+                                AddLog("[TP] Saved: " + string.Join(", ", _teleports.Keys));
+                        }
+                        break;
+
+                    case "listtp":
+                        CmdListTp();
+                        break;
+
+                    case "removetp":
+                        if (_cmdParts.Length > 1)
+                        {
+                            string rKey = _cmdParts[1].ToLowerInvariant();
+                            if (_teleports.Remove(rKey)) { SaveTeleports(); AddLog($"[TP] Removed: {rKey}"); }
+                            else AddLog($"[TP] Not found: {rKey}");
+                        }
+                        else AddLog("Usage: removetp <name>");
+                        break;
+
+                    case "addtime":
+                        if (_cmdParts.Length > 1 && int.TryParse(_cmdParts[1], out int addH))
+                            CmdAddTime(addH);
+                        else AddLog("Usage: addtime <hours>  (e.g. addtime 2  or  addtime -1)");
+                        break;
+
+
                     default:
                         // ── .cs shortcut — wpisanie nazwy pliku uruchamia runfile ──────
                         if (cmd.EndsWith(".cs"))
@@ -986,6 +1087,35 @@ namespace CMS2026SimpleConsole
             AddLog("Log copied to clipboard.");
         }
 
+        private void CmdAddTime(int hours)
+        {
+            try
+            {
+                var tmType = AppDomain.CurrentDomain.GetAssemblies()
+                    .SelectMany(a => { try { return a.GetTypes(); } catch { return Type.EmptyTypes; } })
+                    .FirstOrDefault(t => t.FullName == "Il2CppCMS.Core.TimeManagement.TimeManager");
+
+                if (tmType == null) { AddLog("[addtime] TimeManager not found."); return; }
+
+                var il2T = Il2CppInterop.Runtime.Il2CppType.From(tmType);
+                var objs = UnityEngine.Object.FindObjectsOfType(il2T, true);
+                if (objs.Length == 0) { AddLog("[addtime] Not in scene."); return; }
+
+                var inst = Activator.CreateInstance(tmType, new object[] { objs[0].Pointer });
+
+                var method = tmType.GetMethod("SkipTime",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null,
+                    new Type[] { typeof(int) },
+                    null);
+
+                if (method == null) { AddLog("[addtime] SkipTime(int) not found."); return; }
+
+                method.Invoke(inst, new object[] { hours });
+                AddLog($"[addtime] <color=#7ec8a0>{(hours >= 0 ? "+" : "")}{hours}h</color> ✓");
+            }
+            catch (Exception ex) { AddLog("[addtime] ERR: " + ex.Message); }
+        }
         private static void TryResolveFrameworkCursor()
         {
             if (_fwCursorResolved) return;
@@ -1139,6 +1269,250 @@ namespace CMS2026SimpleConsole
             if (gls.Length == 0) return null;
             return Activator.CreateInstance(glType, new object[] { gls[0].Pointer });
         }
+
+        // ── allskills ─────────────────────────────────────────────────────────────
+        private void CmdAllSkills()
+        {
+            try
+            {
+                var tsType = AppDomain.CurrentDomain.GetAssemblies()
+                    .SelectMany(a => { try { return a.GetTypes(); } catch { return Type.EmptyTypes; } })
+                    .FirstOrDefault(t => t.Name == "TestScript");
+
+                if (tsType == null)
+                {
+                    AddLog("[allskills] TestScript type not found — load a Garage save first.");
+                    return;
+                }
+
+                var il2T = Il2CppInterop.Runtime.Il2CppType.From(tsType);
+                var objs = UnityEngine.Object.FindObjectsOfType(il2T, true);
+                if (objs.Length == 0)
+                {
+                    AddLog("[allskills] TestScript not found in scene — load a Garage save first.");
+                    return;
+                }
+
+                var ts = Activator.CreateInstance(tsType, new object[] { objs[0].Pointer });
+                tsType.GetMethod("UnlockAllSkills")?.Invoke(ts, null);
+                AddLog("[allskills] All skills unlocked!");
+            }
+            catch (Exception ex) { AddLog("[allskills] ERR: " + ex.Message); }
+        }
+
+        // ── settime ───────────────────────────────────────────────────────────────
+        private void CmdSetTime(int hour, int minute)
+        {
+            try
+            {
+                var tmType = AppDomain.CurrentDomain.GetAssemblies()
+                    .SelectMany(a => { try { return a.GetTypes(); } catch { return Type.EmptyTypes; } })
+                    .FirstOrDefault(t => t.FullName == "Il2CppCMS.Core.TimeManagement.TimeManager");
+
+                if (tmType == null) { AddLog("[settime] TimeManager type not found."); return; }
+
+                var il2T = Il2CppInterop.Runtime.Il2CppType.From(tmType);
+                var objs = UnityEngine.Object.FindObjectsOfType(il2T, true);
+                if (objs.Length == 0) { AddLog("[settime] TimeManager not in scene — load Garage first."); return; }
+
+                var inst = Activator.CreateInstance(tmType, new object[] { objs[0].Pointer });
+
+                // Wybierz przeciążenie SetTime(Byte hour, Byte minute, Boolean sendEvents)
+                var method = tmType.GetMethod("SetTime",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null,
+                    new Type[] { typeof(byte), typeof(byte), typeof(bool) },
+                    null);
+
+                if (method == null) { AddLog("[settime] SetTime(byte,byte,bool) not found."); return; }
+
+                method.Invoke(inst, new object[] { (byte)hour, (byte)minute, true });
+
+                AddLog($"[settime] <color=#7ec8a0>{hour:D2}:{minute:D2}</color> ✓");
+            }
+            catch (Exception ex) { AddLog("[settime] ERR: " + ex.Message); }
+        }
+
+        private bool TryInvokeSetTime(object obj, Type type,
+            int hour, int minute, float hourFloat)
+        {
+            string[] names =
+            {
+        "SetTime", "SetCurrentTime", "SetTimeOfDay",
+        "SetHour", "ForceSetTime", "SetGameTime"
+    };
+            foreach (string n in names)
+            {
+                var m = type.GetMethod(n,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (m == null) continue;
+                var p = m.GetParameters();
+                try
+                {
+                    if (p.Length == 1) { m.Invoke(obj, new object[] { hourFloat }); }
+                    else if (p.Length == 2) { m.Invoke(obj, new object[] { hour, minute }); }
+                    else continue;
+
+                    AddLog($"[settime] <color=#7ec8a0>{hour:D2}:{minute:D2}</color>" +
+                           $" via {type.Name}.{n}");
+                    return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        
+
+        // ── Teleporty ─────────────────────────────────────────────────────────────
+        private void LoadTeleports()
+        {
+            try
+            {
+                if (!File.Exists(TpFilePath)) return;
+                int n = 0;
+                foreach (string line in File.ReadAllLines(TpFilePath))
+                {
+                    if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith("#")) continue;
+                    int eq = line.IndexOf('=');
+                    if (eq < 1) continue;
+                    string name = line.Substring(0, eq).Trim().ToLowerInvariant();
+                    string[] xyz = line.Substring(eq + 1).Trim().Split(',');
+                    if (xyz.Length == 3
+                        && float.TryParse(xyz[0].Trim(), System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out float x)
+                        && float.TryParse(xyz[1].Trim(), System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out float y)
+                        && float.TryParse(xyz[2].Trim(), System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out float z))
+                    {
+                        _teleports[name] = new Vector3(x, y, z);
+                        n++;
+                    }
+                }
+                if (n > 0) AddLog($"[TP] Loaded {n} teleport(s) from tps.txt");
+            }
+            catch (Exception ex) { AddLog("[TP] Load error: " + ex.Message); }
+        }
+
+        private void SaveTeleports()
+        {
+            try
+            {
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                var lines = new List<string>
+        {
+            "# CMS2026 Simple Console — saved teleports",
+            "# Format: name = x,y,z",
+            ""
+        };
+                foreach (var kv in _teleports)
+                    lines.Add($"{kv.Key} = " +
+                              $"{kv.Value.x.ToString("F3", ci)}," +
+                              $"{kv.Value.y.ToString("F3", ci)}," +
+                              $"{kv.Value.z.ToString("F3", ci)}");
+                File.WriteAllLines(TpFilePath, lines);
+            }
+            catch (Exception ex) { AddLog("[TP] Save error: " + ex.Message); }
+        }
+
+        private void CmdSaveTp(string name)
+        {
+            try
+            {
+                var pcType = AppDomain.CurrentDomain.GetAssemblies()
+                    .SelectMany(a => { try { return a.GetTypes(); } catch { return Type.EmptyTypes; } })
+                    .FirstOrDefault(t => t.FullName == "Il2CppCMS.Player.Controller.PlayerController");
+
+                if (pcType == null) { AddLog("[savetp] PlayerController type not found."); return; }
+
+                var il2T = Il2CppInterop.Runtime.Il2CppType.From(pcType);
+                var objs = UnityEngine.Object.FindObjectsOfType(il2T, true);
+                if (objs.Length == 0) { AddLog("[savetp] PlayerController not in scene."); return; }
+
+                var inst = Activator.CreateInstance(pcType, new object[] { objs[0].Pointer });
+                var comp = (UnityEngine.Component)(object)inst;
+                Vector3 pos = comp.transform.position;
+
+                _teleports[name] = pos;
+                SaveTeleports();
+                AddLog($"[savetp] '<color=#c8d870>{name}</color>' → ({pos.x:F2}, {pos.y:F2}, {pos.z:F2}) ✓");
+            }
+            catch (Exception ex) { AddLog("[savetp] ERR: " + ex.Message); }
+        }
+
+        private System.Collections.IEnumerator CmdTpRoutine(string name)
+        {
+            if (!_teleports.TryGetValue(name, out Vector3 pos))
+            {
+                AddLog($"[tp] '{name}' not found.  " +
+                       $"Available: {(_teleports.Count > 0 ? string.Join(", ", _teleports.Keys) : "(none)")}");
+                yield break;
+            }
+
+            var pcType = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(a => { try { return a.GetTypes(); } catch { return System.Type.EmptyTypes; } })
+                .FirstOrDefault(t => t.FullName == "Il2CppCMS.Player.Controller.PlayerController");
+
+            if (pcType == null) { AddLog("[tp] PlayerController type not found."); yield break; }
+
+            var il2Pc = Il2CppInterop.Runtime.Il2CppType.From(pcType);
+            var pcObjs = UnityEngine.Object.FindObjectsOfType(il2Pc, true);
+            if (pcObjs.Length == 0) { AddLog("[tp] PlayerController not in scene."); yield break; }
+
+            var pcInst = Activator.CreateInstance(pcType, new object[] { pcObjs[0].Pointer });
+            var pcComp = (UnityEngine.Component)(object)pcInst;
+
+            var pmType = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(a => { try { return a.GetTypes(); } catch { return System.Type.EmptyTypes; } })
+                .FirstOrDefault(t => t.FullName == "Il2CppCMS.Player.Controller.PlayerMovement");
+
+            if (pmType == null) { AddLog("[tp] PlayerMovement type not found."); yield break; }
+
+            var il2Pm = Il2CppInterop.Runtime.Il2CppType.From(pmType);
+            var pmObjs = UnityEngine.Object.FindObjectsOfType(il2Pm, true);
+            if (pmObjs.Length == 0) { AddLog("[tp] PlayerMovement not in scene."); yield break; }
+
+            var pmInst = Activator.CreateInstance(pmType, new object[] { pmObjs[0].Pointer });
+
+            var queueTp = pmType.GetMethod("QueueTeleport",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+                null,
+                new System.Type[] { typeof(Vector3), typeof(Quaternion) },
+                null);
+
+            if (queueTp == null) { AddLog("[tp] QueueTeleport not found."); yield break; }
+
+            // ── Zamknij konsolę i odblokuj input ────────────────────────────────
+            _renderer.SetVisible(false);
+            SetGameInputEnabled(true);
+
+            yield return null;
+            yield return null;
+            yield return new UnityEngine.WaitForFixedUpdate();
+
+            queueTp.Invoke(pmInst, new object[] { pos, pcComp.transform.rotation });
+
+            for (int i = 0; i < 8; i++)
+                yield return new UnityEngine.WaitForFixedUpdate();
+
+            float diff = UnityEngine.Vector3.Distance(pos, pcComp.transform.position);
+            AddLog($"[tp] → '<color=#c8d870>{name}</color>' ({pos.x:F2}, {pos.y:F2}, {pos.z:F2})" +
+                   $"  diff={diff:F2}  {(diff < 1f ? "<color=#7ec8a0>✓</color>" : "<color=#e05555>fail</color>")}");
+        }
+
+        private void CmdListTp()
+        {
+            if (_teleports.Count == 0)
+            { AddLog("[TP] No teleports saved. Use: savetp <name>"); return; }
+
+            AddLog($"[TP] Saved teleports ({_teleports.Count}):");
+            foreach (var kv in _teleports)
+                AddLog($"  <color=#c8d870>{kv.Key,-20}</color> " +
+                       $"({kv.Value.x:F2}, {kv.Value.y:F2}, {kv.Value.z:F2})");
+            AddLog($"  File: {TpFilePath}");
+        }
+
 
         private void PerformSave()
         {
