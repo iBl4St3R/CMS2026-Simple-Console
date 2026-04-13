@@ -27,6 +27,10 @@ using Il2CppCMS.Player.Controller;
 using Il2CppCMS.Core.Car;
 using Il2CppCMS.SaveSystem.Containers.Car;
 using Il2CppInterop.Runtime;
+using UnityEngine.UI;
+
+
+
 
 public static class __Repl
 {{
@@ -54,7 +58,7 @@ public static class __Repl
             string interopDir = Path.Combine(melonDir, "Il2CppAssemblies");
             string net6Dir = Path.Combine(melonDir, "net6");
             string userLibsDir = Path.Combine(gameDir, "UserLibs");
-            string modsDir = Path.Combine(gameDir, "Mods");   // ← NOWE
+            string modsDir = Path.Combine(gameDir, "Mods");  
 
             _log($"[REPL] MelonDir:   {melonDir}");
             _log($"[REPL] InteropDir: {interopDir}");
@@ -79,6 +83,12 @@ public static class __Repl
         Path.Combine(net6Dir,    "Il2CppInterop.Common.dll"),
         Path.Combine(userLibsDir,"Microsoft.CodeAnalysis.dll"),
         Path.Combine(userLibsDir,"Microsoft.CodeAnalysis.CSharp.dll"),
+
+        Path.Combine(interopDir, "UnityEngine.UIModule.dll"),
+        Path.Combine(interopDir, "UnityEngine.UI.dll"),
+        Path.Combine(interopDir, "Unity.TextMeshPro.dll"),
+        Path.Combine(interopDir, "UnityEngine.ImageConversionModule.dll"),
+
     };
 
             int ok = 0, skip = 0;
