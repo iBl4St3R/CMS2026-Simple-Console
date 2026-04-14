@@ -13,6 +13,7 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using HarmonyLib;
 
 namespace CMS2026SimpleConsole
 {
@@ -276,45 +277,89 @@ namespace CMS2026SimpleConsole
             _renderer.OnUpdate();
         }
 
+        // ── Harmony patch — blokuj lockState gdy konsola otwarta w aucie ──────
+        private static HarmonyLib.Harmony _harmony;
+        private static bool _blockCursorLock = false;
+
+        private static void PatchCursor()
+        {
+            if (_harmony != null) return;
+            _harmony = new HarmonyLib.Harmony("cms2026simpleconsole.cursorpatch");
+
+            var original = typeof(UnityEngine.Cursor)
+                .GetProperty("lockState")
+                .GetSetMethod();
+
+            var prefix = typeof(CMS2026SimpleConsoleComponent)
+                .GetMethod(nameof(CursorLockPrefix),
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+            _harmony.Patch(original, new HarmonyLib.HarmonyMethod(prefix));
+        }
+
+        private static bool CursorLockPrefix(ref CursorLockMode value)
+        {
+            if (_blockCursorLock && value == CursorLockMode.Locked)
+            {
+                value = CursorLockMode.None;
+                return true;
+            }
+            return true;
+        }
+
         private void LateUpdate()
         {
             TryResolveFrameworkCursor();
-
             string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
             bool inGameScene = sceneName == "garage" || sceneName == "Garage";
-
+            bool inCar = UnityEngine.Object.FindObjectOfType<Il2Cpp.CarInputManager>() != null;
             bool lockWhenOpen = _config?.GetBool("lock_input_when_open", true) ?? true;
-            bool consoleLocks = _renderer.IsVisible && lockWhenOpen;
+            bool consoleLocks = _renderer.IsVisible && lockWhenOpen && !inCar;
             bool effectiveLock = (consoleLocks && inGameScene) || _standaloneLockActive;
-
             if (effectiveLock != _inputLocked)
             {
                 _inputLocked = effectiveLock;
                 SetGameInputEnabled(!effectiveLock);
             }
-
-            // ── Blokuj nawigację klawiaturową w menu gdy konsola otwarta ─────────
             if (!inGameScene && lockWhenOpen)
                 SetMenuNavigationEnabled(!_renderer.IsVisible);
 
-            // ── Cursor ────────────────────────────────────────────────────────────
             bool wantCursor = _renderer.IsVisible;
 
-            if (wantCursor && !_cursorRequested)
+            if (!inCar)
             {
-                _cursorRequested = true;
-                if (inGameScene) CursorRequest();
+                // Poza autem — normalna ścieżka przez framework
+                if (wantCursor && !_cursorRequested)
+                {
+                    _cursorRequested = true;
+                    if (inGameScene) CursorRequest();
+                }
+                else if (!wantCursor && _cursorRequested)
+                {
+                    _cursorRequested = false;
+                    if (inGameScene) CursorRelease();
+                }
+                if (!HasFrameworkCursor && _renderer.IsVisible && inGameScene)
+                {
+                    if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
+                    if (Cursor.visible) Cursor.visible = false;
+                }
             }
-            else if (!wantCursor && _cursorRequested)
+            else
             {
-                _cursorRequested = false;
-                if (inGameScene) CursorRelease();
-            }
-
-            if (!HasFrameworkCursor && _renderer.IsVisible && inGameScene)
-            {
-                if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
-                if (Cursor.visible) Cursor.visible = false;
+                if (wantCursor)
+                {
+                    PatchCursor();
+                    _blockCursorLock = true;
+                    Cursor.lockState = CursorLockMode.None;
+                    Cursor.visible = true;
+                }
+                else
+                {
+                    _blockCursorLock = false;
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                }
             }
         }
 
@@ -416,6 +461,9 @@ namespace CMS2026SimpleConsole
                 _cursorRequested = false;
                 CursorRelease();
             }
+
+            _blockCursorLock = false;
+            _harmony?.UnpatchSelf();
 
             _renderer?.Destroy();
             Application.remove_logMessageReceived(new Action<string, string, LogType>(OnUnityLog));

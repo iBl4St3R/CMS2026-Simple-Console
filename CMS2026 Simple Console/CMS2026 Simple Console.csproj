@@ -92,6 +92,10 @@
       <HintPath>$(InteropDir)\Il2CppUniTask.dll</HintPath>
       <Private>false</Private>
     </Reference>
+	<Reference Include="0Harmony">
+  <HintPath>$(Net6Dir)\0Harmony.dll</HintPath>
+  <Private>false</Private>
+</Reference>
   </ItemGroup>
 
   <!-- Roslyn (REPL) -->
