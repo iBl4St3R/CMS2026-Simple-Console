@@ -25,6 +25,11 @@ namespace CMS2026SimpleConsole
         private Il2CppCMS.Player.Controller.PlayerInput _playerInput;
         private bool _inputLocked = false;
 
+        private string _lastNonUIMode = "";
+        private bool _consoleUsesHarmony = false;
+        private bool _isNormalMode = false;
+        private bool _isHarmonyMode = false;
+
         // ── Standalone input lock ─────────────────────────────────────────────
         private bool _standaloneLockActive = false;
 
@@ -272,7 +277,24 @@ namespace CMS2026SimpleConsole
             // ── Toggle console ────────────────────────────────────────────────
             KeyCode toggleKey = ParseKey(_config?.GetString("toggle_console_key", "F7"), KeyCode.F7);
             if (Input.GetKeyDown(toggleKey))
-                _renderer.SetVisible(!_renderer.IsVisible);
+            {
+                if (!_renderer.IsVisible)
+                {
+                    if (_isNormalMode || _isHarmonyMode)
+                    {
+                        _consoleUsesHarmony = _isHarmonyMode;
+                        _renderer.SetVisible(true);
+                    }
+                    else
+                    {
+                        ErrorMsg(_lastNonUIMode);
+                    }
+                }
+                else
+                {
+                    _renderer.SetVisible(false);
+                }
+            }
 
             _renderer.OnUpdate();
         }
@@ -280,6 +302,28 @@ namespace CMS2026SimpleConsole
         // ── Harmony patch — blokuj lockState gdy konsola otwarta w aucie ──────
         private static HarmonyLib.Harmony _harmony;
         private static bool _blockCursorLock = false;
+
+        private void ErrorMsg(string mode)
+        {
+            MelonLoader.MelonCoroutines.Start(ErrorMsgRoutine(mode));
+            AddLog($"[Console] Unavailable in mode: {mode}");
+        }
+
+
+        private System.Collections.IEnumerator ErrorMsgRoutine(string mode)
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                try
+                {
+                    Il2CppCMS.UI.UIManager.Get().ShowPopup(
+                        $"<color=#ff6060>Console unavailable in: {mode}</color>",
+                        Il2Cpp.PopupType.Normal);
+                }
+                catch { }
+                yield return new UnityEngine.WaitForSeconds(0.5f);
+            }
+        }
 
         private static void PatchCursor()
         {
@@ -309,10 +353,25 @@ namespace CMS2026SimpleConsole
 
         private void LateUpdate()
         {
+            string rawMode = GetCurrentGameMode();
+            if (rawMode != "UI" && rawMode != "")
+                _lastNonUIMode = rawMode;
+
+            _isNormalMode = _lastNonUIMode == "Garage"
+                         || _lastNonUIMode == "GarageCustomization"
+                         || _lastNonUIMode == "GarageAssemble"
+                         || _lastNonUIMode == "GarageDisassemble"
+                         || _lastNonUIMode == "Interior";
+
+            _isHarmonyMode = _lastNonUIMode == "CarDrive"
+                          || _lastNonUIMode == "GarageDrive";
+
+            bool inCar = _isHarmonyMode; 
+
+
             TryResolveFrameworkCursor();
             string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
             bool inGameScene = sceneName == "garage" || sceneName == "Garage";
-            bool inCar = UnityEngine.Object.FindObjectOfType<Il2Cpp.CarInputManager>() != null;
             bool lockWhenOpen = _config?.GetBool("lock_input_when_open", true) ?? true;
             bool consoleLocks = _renderer.IsVisible && lockWhenOpen && !inCar;
             bool effectiveLock = (consoleLocks && inGameScene) || _standaloneLockActive;
@@ -403,6 +462,23 @@ namespace CMS2026SimpleConsole
         }
 
 
+        private static Type _gameModeType;
+
+        private static string GetCurrentGameMode()
+        {
+            try
+            {
+                if (_gameModeType == null)
+                    _gameModeType = AppDomain.CurrentDomain.GetAssemblies()
+                        .SelectMany(a => { try { return a.GetTypes(); } catch { return Type.EmptyTypes; } })
+                        .FirstOrDefault(t => t.FullName == "Il2CppCMS.Core.GameMode");
+                if (_gameModeType == null) return "";
+                var inst = _gameModeType.GetProperty("instance").GetValue(null);
+                if (inst == null) return "";
+                return _gameModeType.GetProperty("CurrentMode").GetValue(inst)?.ToString() ?? "";
+            }
+            catch { return ""; }
+        }
 
         [HideFromIl2Cpp]
         private System.Collections.IEnumerator LoadFallbacksDelayed()
