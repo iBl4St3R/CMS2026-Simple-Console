@@ -309,7 +309,7 @@ namespace CMS2026SimpleConsole
             AddLog($"[Console] Unavailable in mode: {mode}");
         }
 
-
+        [HideFromIl2Cpp]
         private System.Collections.IEnumerator ErrorMsgRoutine(string mode)
         {
             for (int i = 0; i < 5; i++)
