@@ -278,11 +278,14 @@ namespace CMS2026SimpleConsole
 
         private void LateUpdate()
         {
-            TryResolveFrameworkCursor();   // no-op po pierwszym wywołaniu
+            TryResolveFrameworkCursor();
+
+            string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            bool inGameScene = sceneName == "garage" || sceneName == "Garage";
 
             bool lockWhenOpen = _config?.GetBool("lock_input_when_open", true) ?? true;
             bool consoleLocks = _renderer.IsVisible && lockWhenOpen;
-            bool effectiveLock = consoleLocks || _standaloneLockActive;
+            bool effectiveLock = (consoleLocks && inGameScene) || _standaloneLockActive;
 
             if (effectiveLock != _inputLocked)
             {
@@ -290,29 +293,73 @@ namespace CMS2026SimpleConsole
                 SetGameInputEnabled(!effectiveLock);
             }
 
-            // ── Cursor: śledź przejścia, nie wymuszaj co klatkę ──────────────────
+            // ── Blokuj nawigację klawiaturową w menu gdy konsola otwarta ─────────
+            if (!inGameScene && lockWhenOpen)
+                SetMenuNavigationEnabled(!_renderer.IsVisible);
+
+            // ── Cursor ────────────────────────────────────────────────────────────
             bool wantCursor = _renderer.IsVisible;
 
             if (wantCursor && !_cursorRequested)
             {
                 _cursorRequested = true;
-                CursorRequest();
+                if (inGameScene) CursorRequest();
             }
             else if (!wantCursor && _cursorRequested)
             {
                 _cursorRequested = false;
-                CursorRelease();
+                if (inGameScene) CursorRelease();
             }
 
-            // Standalone: bez frameworka wymuszaj stan co klatkę żeby gra nie nadpisała
-            if (!HasFrameworkCursor && _renderer.IsVisible)
+            if (!HasFrameworkCursor && _renderer.IsVisible && inGameScene)
             {
                 if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
-                // ukryj systemowy kursor — zastępujemy go soft cursorem
                 if (Cursor.visible) Cursor.visible = false;
             }
         }
 
+
+        private bool _menuNavLocked = false;
+
+        private void SetMenuNavigationEnabled(bool enabled)
+        {
+            if (_menuNavLocked == !enabled) return;
+            _menuNavLocked = !enabled;
+
+            try
+            {
+                var assetType = System.Type.GetType(
+                    "UnityEngine.InputSystem.InputActionAsset, Unity.InputSystem");
+                if (assetType == null) return;
+
+                var all = Resources.FindObjectsOfTypeAll(
+                    Il2CppInterop.Runtime.Il2CppType.From(assetType));
+
+                foreach (var raw in all)
+                {
+                    var asset = Activator.CreateInstance(assetType, new object[] { raw.Pointer });
+                    var maps = assetType.GetProperty("actionMaps").GetValue(asset);
+                    int count = (int)maps.GetType().GetProperty("Count").GetValue(maps);
+                    var indexer = maps.GetType().GetProperty("Item");
+
+                    for (int i = 0; i < count; i++)
+                    {
+                        var m = indexer.GetValue(maps, new object[] { i });
+                        var name = (string)m.GetType().GetProperty("name").GetValue(m);
+
+                        // Blokujemy tylko mapy nawigacyjne — nie Gameplay, nie Car itp.
+                        if (name != "UI Common" && name != "Main Menu") continue;
+
+                        m.GetType().GetMethod(enabled ? "Enable" : "Disable").Invoke(m, null);
+                    }
+                }
+            }
+            catch (Exception ex) { AddLog("[InputBlock] MenuNav: " + ex.Message); }
+        }
+
+
+
+        [HideFromIl2Cpp]
         private System.Collections.IEnumerator LoadFallbacksDelayed()
         {
             // Czekamy jedną klatkę — zewnętrzne mody rejestrują się w OnSceneWasInitialized
@@ -503,6 +550,7 @@ namespace CMS2026SimpleConsole
             AddLog(sb.ToString());
         }
 
+        [HideFromIl2Cpp]
         private List<string> GetAllAutocompleteMatches(string prefix)
         {
             prefix = prefix.ToLowerInvariant();
@@ -795,8 +843,10 @@ namespace CMS2026SimpleConsole
                     case "addmoney":
                         int moneyAdd = 10000;
                         if (_cmdParts.Length > 1) int.TryParse(_cmdParts[1], out moneyAdd);
-                        Il2CppCMS.Shared.SharedGameDataManager.Instance.AddMoneyRpc(moneyAdd);
-                        AddLog($"Added ${moneyAdd}. Balance: ${Il2CppCMS.Shared.SharedGameDataManager.Instance.money}");
+                        var sgdmAdd = Il2CppCMS.Shared.SharedGameDataManager.Instance;
+                        if (sgdmAdd == null) { AddLog("[addmoney] SharedGameDataManager not in scene."); break; }
+                        sgdmAdd.AddMoneyRpc(moneyAdd);
+                        AddLog($"Added ${moneyAdd}. Balance: ${sgdmAdd.money}");
                         break;
 
                     case "setmoney":
@@ -1332,7 +1382,7 @@ namespace CMS2026SimpleConsole
             }
             catch (Exception ex) { AddLog("[settime] ERR: " + ex.Message); }
         }
-
+        [HideFromIl2Cpp]
         private bool TryInvokeSetTime(object obj, Type type,
             int hour, int minute, float hourFloat)
         {
@@ -1440,7 +1490,7 @@ namespace CMS2026SimpleConsole
             }
             catch (Exception ex) { AddLog("[savetp] ERR: " + ex.Message); }
         }
-
+        [HideFromIl2Cpp]
         private System.Collections.IEnumerator CmdTpRoutine(string name)
         {
             if (!_teleports.TryGetValue(name, out Vector3 pos))
@@ -1543,7 +1593,7 @@ namespace CMS2026SimpleConsole
                 AddLog("[Save] ERR: " + ex.Message);
             }
         }
-
+        [HideFromIl2Cpp]
         private System.Collections.IEnumerator SaveAndResetRoutine()
         {
             AddLog("[Reset] Initiating auto-save before reload...");
@@ -1559,7 +1609,6 @@ namespace CMS2026SimpleConsole
                 SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
-        //TODO rozszerzyc do api/mods
         private string GetAutocompleteMatch(string prefix)
         {
             prefix = prefix.ToLowerInvariant();
@@ -1867,6 +1916,7 @@ namespace CMS2026SimpleConsole
 
         private void SetGameInputEnabled(bool enabled)
         {
+            // ── PlayerInput + InputManager ───────────────────────────────────────
             try
             {
                 var pi = UnityEngine.Object.FindObjectOfType<Il2CppCMS.Player.Controller.PlayerInput>();
@@ -1882,6 +1932,13 @@ namespace CMS2026SimpleConsole
                 _playerInput = UnityEngine.Object.FindObjectOfType<Il2CppCMS.Player.Controller.PlayerInput>();
             if (_playerInput != null)
                 _playerInput.enabled = enabled;
+
+            // ── UI Common — tylko gdy gracz jest w scenie garage ─────────────────
+            // W menu gra sama zarządza UI Common — nie ingerujemy
+            bool playerInScene = _playerInput != null ||
+                                 UnityEngine.Object.FindObjectOfType<Il2CppCMS.Player.Controller.PlayerInput>() != null;
+
+            if (!playerInScene) return;
 
             try
             {
