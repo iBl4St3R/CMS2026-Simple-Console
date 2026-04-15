@@ -280,7 +280,8 @@ namespace CMS2026SimpleConsole
             {
                 if (!_renderer.IsVisible)
                 {
-                    if (_isNormalMode || _isHarmonyMode)
+                    bool inMenuScene = string.IsNullOrEmpty(_lastNonUIMode);
+                    if (_isNormalMode || _isHarmonyMode || inMenuScene)
                     {
                         _consoleUsesHarmony = _isHarmonyMode;
                         _renderer.SetVisible(true);
@@ -402,6 +403,12 @@ namespace CMS2026SimpleConsole
                 {
                     if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
                     if (Cursor.visible) Cursor.visible = false;
+                }
+                // FIX: wymuś odblokowanie kursora każdą klatkę gdy konsola widoczna
+                if (_renderer.IsVisible && inGameScene)
+                {
+                    if (Cursor.lockState != CursorLockMode.None)
+                        Cursor.lockState = CursorLockMode.None;
                 }
             }
             else
