@@ -725,6 +725,8 @@ namespace CMS2026SimpleConsole
             return ok;
         }
 
+        [HideFromIl2Cpp]
+        public ReplEvaluator Repl => _repl;
         private void OpenModFolder()
         {
             try
