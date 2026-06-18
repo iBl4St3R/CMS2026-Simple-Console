@@ -36,7 +36,7 @@ For advanced users and developers, the console supports an optional **C# REPL** 
 ---
 
 ## 🖥️ Console Commands
-Press **F7** to toggle the console:
+Press **F7** to toggle the console :
 
 * **Tab** – Cycle through command suggestions
 * **Up/Down Arrows** – Browse command history
