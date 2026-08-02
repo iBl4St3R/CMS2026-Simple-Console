@@ -51,6 +51,8 @@ namespace CMS2026SimpleConsole
         private IConsoleRenderer _renderer;
         private ReplEvaluator _repl;
         private ConfigManager _config;
+        private bool _hadStartupIssue = false;
+        private static bool _startupPromptShown = false;
 
         private readonly List<string> _logLines = new List<string>();
         private string[] _cmdParts;
@@ -108,6 +110,8 @@ namespace CMS2026SimpleConsole
             ConsolePlugin.Config = _config;
 
             InitRenderer();
+            if (_config.GetBool("uitoolkit_priority", true) && _renderer is IMGUIConsoleRenderer)
+                _hadStartupIssue = true;
 
 
             // Subskrybuj panel Mods przed załadowaniem fallbacków
@@ -142,6 +146,7 @@ namespace CMS2026SimpleConsole
                     {
                         AddLog("[REPL] INIT ERROR: " + ex.GetType().Name);
                         AddLog("[REPL] " + ex.Message);
+                        _hadStartupIssue = true;
                     }
                 }
             }
@@ -168,6 +173,8 @@ namespace CMS2026SimpleConsole
 
 
             LoadTeleports();
+
+            ShowStartupPrompt(_hadStartupIssue);
         }
 
         private void InitRenderer()
@@ -306,8 +313,13 @@ namespace CMS2026SimpleConsole
 
         private void ErrorMsg(string mode)
         {
-            MelonLoader.MelonCoroutines.Start(ErrorMsgRoutine(mode));
+            string plainMsg = $"Console unavailable in: {mode}";
             AddLog($"[Console] Unavailable in mode: {mode}");
+
+            if (TryShowFrameworkWarning(plainMsg, 6f))
+                return;
+
+            MelonLoader.MelonCoroutines.Start(ErrorMsgRoutine(mode));
         }
 
         [HideFromIl2Cpp]
@@ -2095,6 +2107,89 @@ namespace CMS2026SimpleConsole
                 }
             }
             catch (Exception ex) { AddLog("[InputBlock] UICommon: " + ex.Message); }
+        }
+
+        // ── Framework prompt integration (UITK Framework, optional) ────────────────
+        private static Type _uiPromptType;
+        private static Type _promptPriorityType;
+        private static MethodInfo _promptKeyIconMethod;
+        private static MethodInfo _promptWarningMethod;
+        private static bool _promptTypesResolved;
+
+        private static void ResolvePromptTypes()
+        {
+            if (_promptTypesResolved) return;
+            _promptTypesResolved = true;
+            try
+            {
+                var asm = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "_CMS2026_UITK_Framework");
+                if (asm == null) return;
+                _uiPromptType = asm.GetType("CMS2026UITKFramework.UIPrompt");
+                _promptPriorityType = asm.GetType("CMS2026UITKFramework.PromptPriority");
+                _promptKeyIconMethod = _uiPromptType?.GetMethod("KeyIcon");
+                _promptWarningMethod = _uiPromptType?.GetMethod("Warning");
+            }
+            catch { }
+        }
+
+        [HideFromIl2Cpp]
+        private void ShowStartupPrompt(bool hadErrors)
+        {
+            if (_startupPromptShown) return;
+            if (!(_config?.GetBool("use_uitk_prompts", true) ?? true)) return;
+
+            ResolvePromptTypes();
+            if (_uiPromptType == null || _promptPriorityType == null) return;
+
+            try
+            {
+                var frameworkApiType = _uiPromptType.Assembly.GetType("CMS2026UITKFramework.FrameworkAPI");
+                bool ready = frameworkApiType != null && (bool)(frameworkApiType.GetProperty("IsReady")?.GetValue(null) ?? false);
+                if (!ready) return;
+
+                _startupPromptShown = true;
+
+                if (hadErrors)
+                {
+                    object warnPriority = Enum.Parse(_promptPriorityType, "Warning");
+                    string msg = $"Warning! CMS2026 Simple Console v{ConsolePlugin.Version} encountered errors during startup. Check the MelonLoader console or log files for details.";
+                    _promptWarningMethod?.Invoke(null, new object[] { msg, warnPriority, 10f });
+                }
+                else
+                {
+                    object infoPriority = Enum.Parse(_promptPriorityType, "Normal");
+                    KeyCode toggleKey = ParseKey(_config?.GetString("toggle_console_key", "F7"), KeyCode.F7);
+                    string msg = $"CMS2026 Simple Console v{ConsolePlugin.Version} loaded successfully. Press this key anytime to open the console window.";
+                    _promptKeyIconMethod?.Invoke(null, new object[] { toggleKey, msg, infoPriority, 5f });
+                }
+            }
+            catch (Exception ex) { AddLog("[Prompt] ERR: " + ex.Message); }
+        }
+
+        // ── Shared: show a framework warning prompt instead of spamming a game popup ──
+        [HideFromIl2Cpp]
+        private bool TryShowFrameworkWarning(string message, float duration)
+        {
+            if (!(_config?.GetBool("use_uitk_prompts", true) ?? true)) return false;
+
+            ResolvePromptTypes();
+            if (_uiPromptType == null || _promptPriorityType == null || _promptWarningMethod == null) return false;
+
+            try
+            {
+                var frameworkApiType = _uiPromptType.Assembly.GetType("CMS2026UITKFramework.FrameworkAPI");
+                bool ready = frameworkApiType != null && (bool)(frameworkApiType.GetProperty("IsReady")?.GetValue(null) ?? false);
+                if (!ready) return false;
+
+                object warnPriority = Enum.Parse(_promptPriorityType, "Warning");
+                _promptWarningMethod.Invoke(null, new object[] { message, warnPriority, duration });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AddLog("[Prompt] ERR: " + ex.Message);
+                return false;
+            }
         }
     }
 }

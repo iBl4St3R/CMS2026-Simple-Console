@@ -693,6 +693,7 @@ namespace CMS2026SimpleConsole
             CfgToggleRow(content, "Lock game input when open", "lock_input_when_open", ref y);
             CfgToggleRow(content, "Show console at startup", "show_at_startup", ref y);
             CfgToggleRow(content, "Capture Unity logs", "capture_unity_logs", ref y);
+            CfgToggleRow(content, "Use UITK Framework prompts (if available)", "use_uitk_prompts", ref y);
 
             CfgToggleRow(content, "Enable C# REPL  (restart required)", "repl_enabled", ref y);
             CfgLabel(content,"⚠  Requires Microsoft.CodeAnalysis.dll(+3) in UserLibs",Pad * 2, y, PanelW - Pad * 6, 18f,new Color(0.75f, 0.65f, 0.40f, 1f));

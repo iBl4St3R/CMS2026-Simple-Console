@@ -18,6 +18,7 @@ namespace CMS2026SimpleConsole
             { "lock_input_when_open",  "true"  },
             { "show_at_startup",       "true"  },
             { "capture_unity_logs",    "false" },
+            { "use_uitk_prompts",      "true"  },
             { "max_log_lines",         "6000"  },
             { "max_display_lines",     "300"   },
             { "toggle_console_key",    "F7"    },
